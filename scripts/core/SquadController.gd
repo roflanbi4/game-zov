@@ -6,7 +6,9 @@ var soldiers: Array = []
 var formation_offsets: Array[Vector2] = []
 
 func _ready() -> void:
-	add_to_group("player_squads")
+	# Определяем группу отряда — если отряд вражеский, не считаем его игроком
+	if not is_in_group("enemy_squads"):
+		add_to_group("player_squads")
 	
 	# Создаём NavigationPolygon для навигации
 	var np = NavigationPolygon.new()
@@ -34,3 +36,11 @@ func move_squad(destination: Vector2) -> void:
 		var offset: Vector2 = formation_offsets[i % formation_offsets.size()]
 		var squad_dest: Vector2 = destination + offset
 		soldiers[i].set_destination(squad_dest)
+
+func on_soldier_died(soldier: Node2D) -> void:
+	if is_instance_valid(soldier):
+		soldiers.erase(soldier)
+	if is_instance_valid(soldier):
+		soldier.queue_free()
+	if soldiers.is_empty():
+		queue_free()

@@ -1,0 +1,94 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/SquadController.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/core/HealthComponent.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/core/WeaponComponent.gd" id="3"]
+
+[node name="EnemySquad" type="Node2D"]
+script = ExtResource("1")
+groups = PackedStringArray("enemy_squads")
+position = Vector2(900, 400)
+
+[node name="EnemySoldier1" type="CharacterBody2D" parent="."]
+position = Vector2(-24, 0)
+
+[node name="HealthComponent" type="HealthComponent" parent="EnemySoldier1"]
+script = ExtResource("2")
+
+[node name="WeaponComponent" type="WeaponComponent" parent="EnemySoldier1"]
+script = ExtResource("3")
+target_group = "player_units"
+
+[node name="DetectionArea" type="Area2D" parent="EnemySoldier1"]
+[node name="DetectionShape" type="CollisionShape2D" parent="EnemySoldier1/DetectionArea"]
+shape = SubResource("1")
+
+[node name="Muzzle" type="Node2D" parent="EnemySoldier1"]
+position = Vector2(8, 0)
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="EnemySoldier1"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="EnemySoldier1"]
+shape = SubResource("2")
+
+[node name="ColorRect" type="ColorRect" parent="EnemySoldier1"]
+size = Vector2(16, 16)
+color = Color(1.0, 0.0, 0.0, 1.0)
+mouse_filter = 2
+
+[node name="EnemySoldier2" type="CharacterBody2D" parent="."]
+position = Vector2(24, 0)
+
+[node name="HealthComponent2" type="HealthComponent" parent="EnemySoldier2"]
+script = ExtResource("2")
+
+[node name="WeaponComponent2" type="WeaponComponent" parent="EnemySoldier2"]
+script = ExtResource("3")
+target_group = "player_units"
+
+[node name="DetectionArea2" type="Area2D" parent="EnemySoldier2"]
+[node name="DetectionShape2" type="CollisionShape2D" parent="EnemySoldier2/DetectionArea2"]
+shape = SubResource("1")
+
+[node name="Muzzle2" type="Node2D" parent="EnemySoldier2"]
+position = Vector2(8, 0)
+
+[node name="NavigationAgent2D2" type="NavigationAgent2D" parent="EnemySoldier2"]
+[node name="CollisionShape2D2" type="CollisionShape2D" parent="EnemySoldier2"]
+shape = SubResource("2")
+
+[node name="ColorRect2" type="ColorRect" parent="EnemySoldier2"]
+size = Vector2(16, 16)
+color = Color(1.0, 0.0, 0.0, 1.0)
+mouse_filter = 2
+
+[node name="EnemySoldier3" type="CharacterBody2D" parent="."]
+position = Vector2(0, -24)
+
+[node name="HealthComponent3" type="HealthComponent" parent="EnemySoldier3"]
+script = ExtResource("2")
+
+[node name="WeaponComponent3" type="WeaponComponent" parent="EnemySoldier3"]
+script = ExtResource("3")
+target_group = "player_units"
+
+[node name="DetectionArea3" type="Area2D" parent="EnemySoldier3"]
+[node name="DetectionShape3" type="CollisionShape2D" parent="EnemySoldier3/DetectionArea3"]
+shape = SubResource("1")
+
+[node name="Muzzle3" type="Node2D" parent="EnemySoldier3"]
+position = Vector2(8, 0)
+
+[node name="NavigationAgent2D3" type="NavigationAgent2D" parent="EnemySoldier3"]
+[node name="CollisionShape2D3" type="CollisionShape2D" parent="EnemySoldier3"]
+shape = SubResource("2")
+
+[node name="ColorRect3" type="ColorRect" parent="EnemySoldier3"]
+size = Vector2(16, 16)
+color = Color(1.0, 0.0, 0.0, 1.0)
+mouse_filter = 2
+
+[sub_resource id="1" type="CircleShape2D"]
+radius = 400.0
+
+[sub_resource id="2" type="CircleShape2D"]
+radius = 4.0
