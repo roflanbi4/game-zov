@@ -1,0 +1,24 @@
+# SYSTEM RULES FOR GODOT 4 (WEB / GDSCRIPT 2.0)
+
+## 1. TECH STACK & WEB OPTIMIZATION CONSTRAINTS
+- **Engine:** Godot 4.x (using **GDScript 2.0** ONLY — do NOT write C#).
+- **Target Platform:** **HTML5 / Web Browser** (Compatibility Renderer).
+  - Do NOT use `Thread`, `GDExtension`, heavy 3D/2D physics, or complex custom shaders unsupported by WebGL2.
+  - Pool projectiles/particles or reuse nodes where possible to prevent browser garbage-collection stutter.
+- **Art Style:** 2D Top-Down Pixel Art. Always set texture filter to `Nearest` (`CanvasItem.TEXTURE_FILTER_NEAREST`).
+
+## 2. STRICT GDSCRIPT 2.0 SYNTAX (ZERO GODOT 3 HALLUCINATIONS)
+- **Annotations:** Use `@export`, `@onready`, `@icon` (NEVER `export` or `onready`).
+- **Inheritance:** Use `super()` or `super.method_name()` (NEVER `.method_name()`).
+- **Physics:** Use `CharacterBody2D` and call `move_and_slide()` with **0 arguments** (assign `velocity` property first).
+- **Signals:** Emit with `signal_name.emit(args)` and connect with `signal_name.connect(callable)`.
+- **Tweens:** Use `var tween := create_tween()` (NEVER instantiate a `Tween` node).
+- **Pathfinding:** Use `NavigationAgent2D` + `NavigationRegion2D` (NEVER `Navigation2D`).
+- **Static Typing:** ALWAYS use explicit static types on all variables, parameters, and return types (e.g., `var hp: int = 100`, `func apply_damage(amount: int) -> void:`).
+
+## 3. GODOT MCP & ANTI-HALLUCINATION WORKFLOW
+1. **Use Godot MCP Tools Directly:** You have active Godot MCP access. Use MCP tools to create scenes, add/configure nodes, attach scripts, and inspect the scene tree instead of asking the user to click manually in the editor.
+2. **Never Edit `.tscn` as Raw Text:** Always modify scenes through Godot MCP tools, NEVER by manually writing raw `.tscn` text.
+3. **Verify via Run/Console:** After creating nodes or scripts via MCP, run the project or check Godot output logs via MCP to confirm zero errors before finishing the step.
+4. **One Module Per Turn:** Implement only ONE logical step from `GDD_FOR_AI.md` per task. Keep scripts modular and under 250 lines.
+5. **Plan First:** In `Plan` mode, list the exact MCP actions, scenes, and scripts you will create before executing in `Act` mode.
