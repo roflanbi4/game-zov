@@ -1,7 +1,12 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/core/RTSCamera.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/core/SelectionManager.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/core/SquadController.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/core/Soldier.gd" id="4"]
+
+[sub_resource id="1" type="CircleShape2D"]
+radius = 4.0
 
 [node name="Main" type="Node2D"]
 
@@ -15,12 +20,84 @@ script = ExtResource("2")
 size = Vector2(1920, 1080)
 color = Color(0.16, 0.16, 0.18, 1.0)
 
-[node name="TestUnit1" type="CharacterBody2D" parent="."]
-position = Vector2(400, 300)
+[node name="NavRegion" type="NavigationRegion2D" parent="."]
 
-[node name="Sprite2D" type="Sprite2D" parent="./TestUnit1"]
+[node name="Squad1" type="Node2D" parent="."]
+script = ExtResource("3")
+position = Vector2(400, 400)
 
-[node name="TestUnit2" type="CharacterBody2D" parent="."]
-position = Vector2(500, 300)
+[node name="Soldier1" type="CharacterBody2D" parent="Squad1"]
+script = ExtResource("4")
+position = Vector2(-24, 0)
 
-[node name="Sprite2D" type="Sprite2D" parent="./TestUnit2"]
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="Squad1/Soldier1"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Squad1/Soldier1"]
+shape = SubResource("1")
+[node name="ColorRect" type="ColorRect" parent="Squad1/Soldier1"]
+size = Vector2(16, 16)
+color = Color(1.0, 0.33, 0.33, 1.0)
+mouse_filter = 2
+
+[node name="Soldier2" type="CharacterBody2D" parent="Squad1"]
+script = ExtResource("4")
+position = Vector2(24, 0)
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="Squad1/Soldier2"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Squad1/Soldier2"]
+shape = SubResource("1")
+[node name="ColorRect" type="ColorRect" parent="Squad1/Soldier2"]
+size = Vector2(16, 16)
+color = Color(0.33, 1.0, 0.33, 1.0)
+mouse_filter = 2
+
+[node name="Soldier3" type="CharacterBody2D" parent="Squad1"]
+script = ExtResource("4")
+position = Vector2(0, -24)
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="Squad1/Soldier3"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Squad1/Soldier3"]
+shape = SubResource("1")
+[node name="ColorRect" type="ColorRect" parent="Squad1/Soldier3"]
+size = Vector2(16, 16)
+color = Color(0.33, 0.33, 1.0, 1.0)
+mouse_filter = 2
+
+[node name="Squad2" type="Node2D" parent="."]
+script = ExtResource("3")
+position = Vector2(600, 400)
+
+[node name="Soldier1" type="CharacterBody2D" parent="Squad2"]
+script = ExtResource("4")
+position = Vector2(-24, 0)
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="Squad2/Soldier1"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Squad2/Soldier1"]
+shape = SubResource("1")
+[node name="ColorRect" type="ColorRect" parent="Squad2/Soldier1"]
+size = Vector2(16, 16)
+color = Color(1.0, 0.33, 0.33, 1.0)
+mouse_filter = 2
+
+[node name="Soldier2" type="CharacterBody2D" parent="Squad2"]
+script = ExtResource("4")
+position = Vector2(24, 0)
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="Squad2/Soldier2"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Squad2/Soldier2"]
+shape = SubResource("1")
+[node name="ColorRect" type="ColorRect" parent="Squad2/Soldier2"]
+size = Vector2(16, 16)
+color = Color(0.33, 1.0, 0.33, 1.0)
+mouse_filter = 2
+
+[node name="Soldier3" type="CharacterBody2D" parent="Squad2"]
+script = ExtResource("4")
+position = Vector2(0, -24)
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="Squad2/Soldier3"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Squad2/Soldier3"]
+shape = SubResource("1")
+[node name="ColorRect" type="ColorRect" parent="Squad2/Soldier3"]
+size = Vector2(16, 16)
+color = Color(0.33, 0.33, 1.0, 1.0)
+mouse_filter = 2
