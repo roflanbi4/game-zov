@@ -14,8 +14,31 @@ func _ready() -> void:
 		squad_controller = get_parent() as Node2D
 	if specialist_type == Type.RADIO:
 		_apply_radio_bonus()
+	if specialist_type == Type.MEDIC:
+		_attach_medic_badge()
 	if specialist_type != Type.MEDIC:
 		_reset_medic_bonuses()
+
+func _attach_medic_badge() -> void:
+	if squad_controller == null or not is_instance_valid(squad_controller):
+		return
+	var soldiers: Array = squad_controller.get("soldiers")
+	if soldiers == null or soldiers.is_empty():
+		return
+	for s in soldiers:
+		var soldier: Node2D = s as Node2D
+		if soldier == null or not is_instance_valid(soldier):
+			continue
+		if soldier.get_node_or_null("MedicBadge") != null:
+			continue
+		var badge := ColorRect.new()
+		badge.name = "MedicBadge"
+		badge.size = Vector2(8.0, 8.0)
+		badge.position = Vector2(-4.0, -18.0)
+		badge.color = Color(0.1, 1.0, 0.3, 1.0)
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		soldier.add_child(badge)
+		return
 
 func _process(delta: float) -> void:
 	if squad_controller == null or not is_instance_valid(squad_controller):

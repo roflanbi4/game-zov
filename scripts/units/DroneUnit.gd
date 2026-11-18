@@ -62,9 +62,6 @@ func _physics_process(_delta: float) -> void:
 		if _check_detonation():
 			_explode()
 			return
-		if to_target.length() <= 20.0:
-			_explode()
-			return
 
 	if to_target.length() < 8.0:
 		velocity = Vector2.ZERO

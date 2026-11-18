@@ -40,6 +40,21 @@ func _ready() -> void:
 	artifact.position = Vector2(450, 550)
 	artifact.buff_type = ArtifactPickup.BuffType.SPEED
 	get_parent().call_deferred("add_child", artifact)
+	
+	# Step 6: Economy, HUD и контрольные точки (программно, без .tscn)
+	var eco := EconomyManager.new()
+	eco.name = "EconomyManager"
+	get_parent().call_deferred("add_child", eco)
+	
+	var hud := GameHUD.new()
+	hud.name = "GameHUD"
+	get_parent().call_deferred("add_child", hud)
+	
+	for i in range(2):
+		var cp := ControlPoint.new()
+		cp.name = "ControlPoint_" + str(i)
+		cp.position = Vector2(400 + i * 300, 300)
+		get_parent().call_deferred("add_child", cp)
 
 func _process(_delta: float) -> void:
 	if is_selecting:
