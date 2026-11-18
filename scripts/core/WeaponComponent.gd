@@ -57,6 +57,7 @@ func _shoot() -> void:
 	var bullet := Node2D.new()
 	var script_res := preload("res://scripts/core/Projectile.gd")
 	bullet.set_script(script_res)
+	bullet.set("shooter", get_parent())
 	var rect := ColorRect.new()
 	rect.size = Vector2(6, 6)
 	rect.position = Vector2(-3, -3)

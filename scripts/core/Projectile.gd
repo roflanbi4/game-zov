@@ -6,6 +6,7 @@ extends Node2D
 
 var target_position: Vector2 = Vector2.ZERO
 var active: bool = true
+var shooter: Node2D = null
 
 func setup(target: Vector2, projectile_speed: float, projectile_damage: int, projectile_target_group: String) -> void:
 	target_position = target
@@ -30,5 +31,23 @@ func _hit_target() -> void:
 			var health: HealthComponent = obj.get_node_or_null("HealthComponent")
 			if health:
 				health.take_damage(damage)
+			_award_xp()
 			break
 	queue_free()
+
+func _award_xp() -> void:
+	if shooter == null or not is_instance_valid(shooter):
+		return
+	var squad: Node = shooter.get("squad_controller")
+	if squad != null and is_instance_valid(squad):
+		var soldiers: Array = squad.get("soldiers")
+		if soldiers != null:
+			for s in soldiers:
+				if is_instance_valid(s):
+					var vet: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+					if vet != null:
+						vet.add_xp(15)
+			return
+	var vet: VeterancyComponent = shooter.get_node_or_null("VeterancyComponent") as VeterancyComponent
+	if vet != null:
+		vet.add_xp(15)

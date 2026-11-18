@@ -1,9 +1,11 @@
 extends Node2D
 
 @export var formation_spacing: float = 24.0
+@export var specialist_type: int = 0
 
 var soldiers: Array = []
 var formation_offsets: Array[Vector2] = []
+var specialist_component: SpecialistComponent
 
 func _ready() -> void:
 	# Определяем группу отряда — если отряд вражеский, не считаем его игроком
@@ -30,6 +32,13 @@ func _ready() -> void:
 	for i in range(soldiers.size()):
 		if i < formation_offsets.size():
 			soldiers[i].formation_offset = formation_offsets[i]
+	specialist_component = get_node_or_null("SpecialistComponent")
+	if specialist_component == null:
+		specialist_component = SpecialistComponent.new()
+		specialist_component.name = "SpecialistComponent"
+		specialist_component.specialist_type = specialist_type
+		add_child(specialist_component)
+
 
 func move_squad(destination: Vector2) -> void:
 	for i in range(soldiers.size()):
@@ -40,6 +49,11 @@ func move_squad(destination: Vector2) -> void:
 func on_soldier_died(soldier: Node2D) -> void:
 	if is_instance_valid(soldier):
 		soldiers.erase(soldier)
+		for s in soldiers:
+			if is_instance_valid(s):
+				var m: MoraleComponent = s.get_node_or_null("MoraleComponent") as MoraleComponent
+				if m != null:
+					m.reduce_morale(20.0)
 	if is_instance_valid(soldier):
 		soldier.queue_free()
 	if soldiers.is_empty():

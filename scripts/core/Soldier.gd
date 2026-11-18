@@ -7,6 +7,8 @@ extends CharacterBody2D
 @onready var nav_agent: NavigationAgent2D = $NavigationAgent2D
 var health_component: HealthComponent
 var weapon: WeaponComponent
+var morale_component: MoraleComponent
+var veterancy_component: VeterancyComponent
 
 var target_position: Vector2 = Vector2.ZERO
 var squad_controller: Node2D = null
@@ -26,6 +28,19 @@ func _ready() -> void:
 		weapon = WeaponComponent.new()
 		weapon.name = "WeaponComponent"
 		add_child(weapon)
+	morale_component = get_node_or_null("MoraleComponent")
+	if morale_component == null:
+		morale_component = MoraleComponent.new()
+		morale_component.name = "MoraleComponent"
+		add_child(morale_component)
+
+	veterancy_component = get_node_or_null("VeterancyComponent")
+	if veterancy_component == null:
+		veterancy_component = VeterancyComponent.new()
+		veterancy_component.name = "VeterancyComponent"
+		add_child(veterancy_component)
+
+
 	
 	var parent = get_parent()
 	if parent is Node2D:
