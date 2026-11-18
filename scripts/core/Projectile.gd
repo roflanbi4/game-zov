@@ -30,7 +30,10 @@ func _hit_target() -> void:
 		if is_instance_valid(obj) and global_position.distance_to(obj.global_position) < 24.0:
 			var health: HealthComponent = obj.get_node_or_null("HealthComponent")
 			if health:
-				health.take_damage(damage)
+				if obj.has_method("take_damage"):
+					obj.take_damage(damage)
+				else:
+					health.take_damage(damage)
 			_award_xp()
 			break
 	queue_free()

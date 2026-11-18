@@ -15,6 +15,32 @@ signal selection_changed(selected_units: Array[CharacterBody2D], selected_squads
 func _ready() -> void:
 	z_index = 100
 
+	# Тестовый спавн: техника, дрон, аномалия, артефакт
+	var vehicle := VehicleUnit.new()
+	vehicle.name = "TestVehicle"
+	vehicle.position = Vector2(350, 500)
+	vehicle.is_enemy = false
+	get_parent().call_deferred("add_child", vehicle)
+
+	var drone := DroneUnit.new()
+	drone.name = "TestDrone"
+	drone.position = Vector2(380, 520)
+	drone.drone_type = DroneUnit.DroneType.FPV_KAMIKAZE
+	drone.is_enemy = false
+	get_parent().call_deferred("add_child", drone)
+
+	var anomaly := AnomalyZone.new()
+	anomaly.name = "TestAnomaly"
+	anomaly.position = Vector2(550, 550)
+	anomaly.anomaly_type = AnomalyZone.AnomalyType.VORTEX
+	get_parent().call_deferred("add_child", anomaly)
+
+	var artifact := ArtifactPickup.new()
+	artifact.name = "TestArtifact"
+	artifact.position = Vector2(450, 550)
+	artifact.buff_type = ArtifactPickup.BuffType.SPEED
+	get_parent().call_deferred("add_child", artifact)
+
 func _process(_delta: float) -> void:
 	if is_selecting:
 		selection_end = get_global_mouse_position()
@@ -69,9 +95,25 @@ func _select_units_in_box() -> void:
 					soldier.modulate = highlight_color
 					selected_units.append(soldier)
 	
+	# Выделение одиночной техники и дронов
+	var vehicles: Array = get_tree().get_nodes_in_group("player_vehicles")
+	for vehicle in vehicles:
+		if is_instance_valid(vehicle) and rect.has_point(vehicle.global_position):
+			selected_units.append(vehicle)
+			vehicle.modulate = highlight_color
+
+	var drones: Array = get_tree().get_nodes_in_group("player_drones")
+	for drone in drones:
+		if is_instance_valid(drone) and rect.has_point(drone.global_position):
+			selected_units.append(drone)
+			drone.modulate = highlight_color
+
 	selection_changed.emit(selected_units, selected_squads)
 
 func _issue_move_command(target: Vector2) -> void:
 	for squad in selected_squads:
 		if is_instance_valid(squad):
 			squad.move_squad(target)
+	for unit in selected_units:
+		if is_instance_valid(unit) and (unit.is_in_group("player_vehicles") or unit.is_in_group("player_drones")) and unit.has_method("set_destination"):
+			unit.set_destination(target)
