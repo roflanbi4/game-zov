@@ -14,31 +14,41 @@ func _ready() -> void:
 		squad_controller = get_parent() as Node2D
 	if specialist_type == Type.RADIO:
 		_apply_radio_bonus()
-	if specialist_type == Type.MEDIC:
-		_attach_medic_badge()
+	if specialist_type != Type.NONE:
+		_attach_specialist_badge()
 	if specialist_type != Type.MEDIC:
 		_reset_medic_bonuses()
 
-func _attach_medic_badge() -> void:
+func _attach_specialist_badge() -> void:
 	if squad_controller == null or not is_instance_valid(squad_controller):
 		return
 	var soldiers: Array = squad_controller.get("soldiers")
 	if soldiers == null or soldiers.is_empty():
 		return
+	var color: Color = Color.WHITE
+	match specialist_type:
+		Type.MEDIC:
+			color = Color(0.1, 1.0, 0.3, 1.0)
+		Type.SAPPER:
+			color = Color(1.0, 0.55, 0.0, 1.0)
+		Type.RADIO:
+			color = Color(0.0, 0.85, 1.0, 1.0)
+		_:
+			return
 	for s in soldiers:
 		var soldier: Node2D = s as Node2D
 		if soldier == null or not is_instance_valid(soldier):
 			continue
-		if soldier.get_node_or_null("MedicBadge") != null:
-			continue
+		var old_badge: ColorRect = soldier.get_node_or_null("SpecialistBadge") as ColorRect
+		if old_badge != null:
+			old_badge.queue_free()
 		var badge := ColorRect.new()
-		badge.name = "MedicBadge"
+		badge.name = "SpecialistBadge"
 		badge.size = Vector2(8.0, 8.0)
 		badge.position = Vector2(-4.0, -18.0)
-		badge.color = Color(0.1, 1.0, 0.3, 1.0)
+		badge.color = color
 		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		soldier.add_child(badge)
-		return
 
 func _process(delta: float) -> void:
 	if squad_controller == null or not is_instance_valid(squad_controller):
@@ -139,15 +149,48 @@ func place_mine(position: Vector2) -> Node2D:
 		return null
 	var mine: Area2D = Area2D.new()
 	mine.name = "Mine"
+
+	var rect := ColorRect.new()
+	rect.size = Vector2(8.0, 8.0)
+	rect.position = Vector2(-4.0, -4.0)
+	rect.color = Color(0.8, 0.4, 0.1, 1.0)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mine.add_child(rect)
+
 	var shape := CollisionShape2D.new()
 	var circle := CircleShape2D.new()
-	circle.radius = 40.0
+	circle.radius = 8.0
 	shape.shape = circle
 	mine.add_child(shape)
+
 	mine.global_position = position
+	mine.body_entered.connect(_on_mine_body_entered.bind(mine))
+
 	var tree: SceneTree = get_tree()
 	if tree != null and tree.current_scene != null:
 		tree.current_scene.add_child(mine)
 	else:
 		add_child(mine)
 	return mine
+
+func _on_mine_body_entered(body: Node2D, mine: Area2D) -> void:
+	if not is_instance_valid(mine):
+		return
+	var groups: Array = body.get_groups()
+	if "enemy_units" not in groups and "enemy_vehicles" not in groups:
+		return
+	var mine_pos: Vector2 = mine.global_position
+	var damage: int = 120
+	var radius: float = 70.0
+
+	var enemies: Array = get_tree().get_nodes_in_group("enemy_units")
+	enemies.append_array(get_tree().get_nodes_in_group("enemy_vehicles"))
+	for enemy in enemies:
+		if is_instance_valid(enemy) and enemy is Node2D:
+			if mine_pos.distance_to(enemy.global_position) <= radius:
+				var health: HealthComponent = enemy.get_node_or_null("HealthComponent") as HealthComponent
+				if health != null:
+					health.take_damage(damage)
+				elif enemy.has_method("take_damage"):
+					enemy.take_damage(damage)
+	mine.queue_free()

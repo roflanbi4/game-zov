@@ -34,7 +34,10 @@ func _try_spawn() -> void:
 	if get_tree().get_nodes_in_group("enemy_squads").size() > 6:
 		return
 	var target: Node2D = _nearest_enemy_target()
-	if _resources >= 100:
+	if _resources >= 250 and randf() < 0.4:
+		_spawn_enemy_vehicle()
+		_resources -= 250
+	elif _resources >= 100:
 		_spawn_enemy_squad()
 		_resources -= 100
 	elif _resources >= 250:
@@ -43,9 +46,6 @@ func _try_spawn() -> void:
 	elif _resources >= 75:
 		_spawn_enemy_drone()
 		_resources -= 75
-	elif _resources >= 350:
-		_spawn_enemy_squad()
-		_resources -= 100
 	if target != null and is_instance_valid(target):
 		var squads: Array = get_tree().get_nodes_in_group("enemy_squads")
 		var last: Node2D = null

@@ -26,6 +26,8 @@ func _process(_delta: float) -> void:
 		queue_redraw()
 
 func _input(event: InputEvent) -> void:
+	if get_viewport().gui_get_hovered_control() != null:
+		return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			is_selecting = true

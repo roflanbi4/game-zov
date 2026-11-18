@@ -23,6 +23,12 @@ var _bar_root: Node2D = null
 var _bar_bg: ColorRect = null
 var _bar_fg: ColorRect = null
 
+var _panic_retreat_timer: float = 0.0
+var _last_stand: bool = false
+var _cover_indicator: ColorRect = null
+var veterancy_component: VeterancyComponent = null
+@export var retreat_speed: float = 180.0
+
 func _ready() -> void:
 	if soldier == null:
 		soldier = get_parent() as CharacterBody2D
@@ -34,6 +40,8 @@ func _ready() -> void:
 		_base_move_speed = soldier.move_speed
 	if weapon_component != null and _base_attack_cooldown == 0.0:
 		_base_attack_cooldown = weapon_component.attack_cooldown
+	if soldier != null:
+		veterancy_component = soldier.get_node_or_null("VeterancyComponent") as VeterancyComponent
 
 	current_morale = max_morale
 	_create_bar()
@@ -47,6 +55,10 @@ func _process(delta: float) -> void:
 		var rate: float = recovery_rate + _medic_recovery_bonus
 		current_morale = minf(max_morale, current_morale + rate * delta)
 		_update_panic_state()
+
+	_update_last_stand()
+	_update_panic_retreat(delta)
+	_update_cover_indicator()
 
 	_apply_panic_effects()
 	_update_bar()
@@ -71,12 +83,16 @@ func _update_panic_state() -> void:
 
 func _apply_panic_effects() -> void:
 	if soldier != null and is_instance_valid(soldier):
-		if is_panicked:
+		if _last_stand:
+			soldier.move_speed = _base_move_speed
+		elif is_panicked:
 			soldier.move_speed = _base_move_speed * 0.6
 		else:
 			soldier.move_speed = _base_move_speed
 	if weapon_component != null and is_instance_valid(weapon_component):
-		if is_panicked:
+		if _last_stand:
+			weapon_component.attack_cooldown = _base_attack_cooldown * 0.65
+		elif is_panicked:
 			weapon_component.attack_cooldown = _base_attack_cooldown * 2.0
 		else:
 			weapon_component.attack_cooldown = _base_attack_cooldown
@@ -117,3 +133,69 @@ func _update_bar_color() -> void:
 		_bar_fg.color = Color.YELLOW
 	else:
 		_bar_fg.color = Color.GREEN
+
+func _update_last_stand() -> void:
+	if soldier == null or not is_instance_valid(soldier):
+		return
+	if veterancy_component == null:
+		veterancy_component = soldier.get_node_or_null("VeterancyComponent") as VeterancyComponent
+	var rank: int = veterancy_component.rank if veterancy_component != null else 0
+
+	var has_radio: bool = false
+	var squad: Node2D = soldier.get_parent() as Node2D
+	if squad != null:
+		var spec: SpecialistComponent = squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
+		if spec != null and spec.specialist_type == SpecialistComponent.Type.RADIO:
+			has_radio = true
+
+	var hp_low: bool = false
+	if health_component != null and health_component.max_hp > 0:
+		hp_low = float(health_component.current_hp) / float(health_component.max_hp) < 0.35
+
+	var should_last_stand: bool = (rank >= 1 or has_radio) and hp_low
+
+	if should_last_stand and not _last_stand:
+		_last_stand = true
+		is_panicked = false
+		var rect: ColorRect = soldier.get_node_or_null("ColorRect") as ColorRect
+		if rect != null:
+			rect.color = Color(1.0, 0.85, 0.2, 1.0)
+	elif not should_last_stand and _last_stand:
+		_last_stand = false
+		var rect: ColorRect = soldier.get_node_or_null("ColorRect") as ColorRect
+		if rect != null:
+			rect.color = Color(0.2, 0.9, 0.3, 1.0)
+
+func _update_panic_retreat(delta: float) -> void:
+	if soldier == null or not is_instance_valid(soldier):
+		return
+	if _last_stand:
+		return
+	if veterancy_component == null:
+		veterancy_component = soldier.get_node_or_null("VeterancyComponent") as VeterancyComponent
+	var rank: int = veterancy_component.rank if veterancy_component != null else 0
+
+	if current_morale < panic_threshold and rank == 0:
+		_panic_retreat_timer += delta
+		if _panic_retreat_timer >= 1.5:
+			_panic_retreat_timer = 0.0
+			if current_morale < 45.0:
+				soldier.set_destination(soldier.global_position.move_toward(Vector2(200.0, 400.0), retreat_speed))
+
+func _update_cover_indicator() -> void:
+	if soldier == null or not is_instance_valid(soldier):
+		return
+	var health: HealthComponent = soldier.get_node_or_null("HealthComponent") as HealthComponent
+	var cover: bool = health != null and health.in_cover
+
+	if cover and _cover_indicator == null:
+		_cover_indicator = ColorRect.new()
+		_cover_indicator.name = "CoverIndicator"
+		_cover_indicator.size = Vector2(6.0, 6.0)
+		_cover_indicator.position = Vector2(-3.0, -3.0)
+		_cover_indicator.color = Color.BLUE
+		_cover_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		soldier.add_child(_cover_indicator)
+	elif not cover and _cover_indicator != null:
+		_cover_indicator.queue_free()
+		_cover_indicator = null
