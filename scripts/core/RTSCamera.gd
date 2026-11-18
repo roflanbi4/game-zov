@@ -10,6 +10,11 @@ var screen_size: Vector2
 
 func _ready() -> void:
 	screen_size = get_viewport_rect().size
+	# Ограничиваем камеру в пределах карты 1920x1080
+	limit_left = 0
+	limit_top = 0
+	limit_right = 1920
+	limit_bottom = 1080
 
 func _process(delta: float) -> void:
 	var input_dir: Vector2 = Vector2.ZERO
@@ -37,6 +42,8 @@ func _process(delta: float) -> void:
 	
 	# Перемещение камеры
 	position += input_dir.normalized() * pan_speed * delta
+	# Зажимаем в пределах карты
+	position = position.clamp(Vector2.ZERO, Vector2(1920.0, 1080.0))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:

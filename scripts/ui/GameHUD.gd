@@ -35,10 +35,12 @@ func _ready() -> void:
 	_day_night_btn.pressed.connect(_on_day_night_toggled)
 	vbox.add_child(_day_night_btn)
 	
-	# Нижние кнопки закупки
+	# Нижние кнопки закупки — прижаты к нижнему краю окна через якоря
 	var hbox := HBoxContainer.new()
-	hbox.size = Vector2(400, 200)
-	hbox.position = Vector2(10, 100)
+	hbox.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	hbox.offset_left = 10
+	hbox.offset_top = -54
+	hbox.offset_bottom = -10
 	add_child(hbox)
 	
 	var rookie_btn := Button.new()
@@ -71,24 +73,28 @@ func _update_sp_label() -> void:
 		_sp_label.text = "SP: " + str(_eco.get_sp())
 
 func _on_day_night_toggled() -> void:
+	set_night(not _is_night)
+
+func set_night(enabled: bool) -> void:
+	if enabled == _is_night:
+		return
 	var cm: CanvasModulate = get_tree().root.get_node_or_null("CanvasModulate") as CanvasModulate
 	if cm == null:
 		cm = CanvasModulate.new()
 		cm.name = "CanvasModulate"
 		get_tree().root.add_child(cm)
-	
-	if _is_night:
-		# Дневной режим
-		cm.color = Color(1, 1, 1)
-		_day_night_btn.text = "Night"
-		_is_night = false
-		_restore_daylight_ranges()
-	else:
+	if enabled:
 		# Ночной режим
 		cm.color = Color(0.25, 0.28, 0.38)
 		_day_night_btn.text = "Day"
 		_is_night = true
 		_reduce_night_ranges()
+	else:
+		# Дневной режим
+		cm.color = Color.WHITE
+		_day_night_btn.text = "Night"
+		_is_night = false
+		_restore_daylight_ranges()
 
 func _restore_daylight_ranges() -> void:
 	var squads: Array = get_tree().get_nodes_in_group("player_squads")
@@ -135,47 +141,47 @@ func _on_specialist_medic() -> void:
 func _spawn_soldier_squad(count: int) -> void:
 	var squad = _SQUAD_SCRIPT.new()
 	squad.position = Vector2(200, 400)
-	
+
 	for i in range(count):
 		var soldier := Soldier.new()
 		soldier.name = "Soldier_" + str(i)
 		soldier.position = Vector2(i * 24 - 24, 0)
-		
+
 		# Soldier._ready требует NavigationAgent2D, CollisionShape2D, ColorRect
 		var nav := NavigationAgent2D.new()
 		nav.name = "NavigationAgent2D"
 		soldier.add_child(nav)
-		
+
 		var cs := CollisionShape2D.new()
 		var circle := CircleShape2D.new()
 		circle.radius = 6.0
 		cs.shape = circle
 		soldier.add_child(cs)
-		
+
 		var rect := ColorRect.new()
 		rect.size = Vector2(16.0, 16.0)
 		rect.position = Vector2(-8.0, -8.0)
 		rect.color = Color.BLUE
 		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		soldier.add_child(rect)
-		
+
 		squad.add_child(soldier)
 		soldier.add_to_group("player_units")
-	
-	get_tree().root.add_child(squad)
+
+	get_parent().add_child(squad)
 
 func _spawn_vehicle() -> void:
 	var vehicle := VehicleUnit.new()
 	vehicle.position = Vector2(200, 400)
 	vehicle.is_enemy = false
-	get_tree().root.add_child(vehicle)
+	get_parent().add_child(vehicle)
 
 func _spawn_drone() -> void:
 	var drone := DroneUnit.new()
 	drone.position = Vector2(200, 400)
 	drone.drone_type = DroneUnit.DroneType.FPV_KAMIKAZE
 	drone.is_enemy = false
-	get_tree().root.add_child(drone)
+	get_parent().add_child(drone)
 
 func _attach_medic_to_selected() -> void:
 	var target_squad: Node = null

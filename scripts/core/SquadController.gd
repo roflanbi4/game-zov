@@ -1,3 +1,4 @@
+class_name SquadController
 extends Node2D
 
 @export var formation_spacing: float = 24.0

@@ -15,46 +15,10 @@ signal selection_changed(selected_units: Array[CharacterBody2D], selected_squads
 func _ready() -> void:
 	z_index = 100
 
-	# Тестовый спавн: техника, дрон, аномалия, артефакт
-	var vehicle := VehicleUnit.new()
-	vehicle.name = "TestVehicle"
-	vehicle.position = Vector2(350, 500)
-	vehicle.is_enemy = false
-	get_parent().call_deferred("add_child", vehicle)
-
-	var drone := DroneUnit.new()
-	drone.name = "TestDrone"
-	drone.position = Vector2(380, 520)
-	drone.drone_type = DroneUnit.DroneType.FPV_KAMIKAZE
-	drone.is_enemy = false
-	get_parent().call_deferred("add_child", drone)
-
-	var anomaly := AnomalyZone.new()
-	anomaly.name = "TestAnomaly"
-	anomaly.position = Vector2(550, 550)
-	anomaly.anomaly_type = AnomalyZone.AnomalyType.VORTEX
-	get_parent().call_deferred("add_child", anomaly)
-
-	var artifact := ArtifactPickup.new()
-	artifact.name = "TestArtifact"
-	artifact.position = Vector2(450, 550)
-	artifact.buff_type = ArtifactPickup.BuffType.SPEED
-	get_parent().call_deferred("add_child", artifact)
-	
-	# Step 6: Economy, HUD и контрольные точки (программно, без .tscn)
-	var eco := EconomyManager.new()
-	eco.name = "EconomyManager"
-	get_parent().call_deferred("add_child", eco)
-	
-	var hud := GameHUD.new()
-	hud.name = "GameHUD"
-	get_parent().call_deferred("add_child", hud)
-	
-	for i in range(2):
-		var cp := ControlPoint.new()
-		cp.name = "ControlPoint_" + str(i)
-		cp.position = Vector2(400 + i * 300, 300)
-		get_parent().call_deferred("add_child", cp)
+	# Step 7: MissionManager — меню выбора миссий и сборка миссий (программно)
+	var mm := MissionManager.new()
+	mm.name = "MissionManager"
+	get_parent().call_deferred("add_child", mm)
 
 func _process(_delta: float) -> void:
 	if is_selecting:

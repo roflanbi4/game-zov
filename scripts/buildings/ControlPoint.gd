@@ -16,12 +16,14 @@ var player_units_inside: int = 0
 var enemy_units_inside: int = 0
 
 var indicator: ColorRect
+var _progress_bar: ColorRect
 
 signal captured(new_owner: int)
 
 func _ready() -> void:
 	monitoring = true
 	monitorable = false
+	add_to_group("control_points")
 	
 	if get_node_or_null("CollisionShape2D") == null:
 		var cs := CollisionShape2D.new()
@@ -39,6 +41,15 @@ func _ready() -> void:
 		add_child(rect)
 	indicator = get_node("Indicator")
 	
+	# Прогресс-бар захвата (над индикатором, 0→40 px)
+	var pb := ColorRect.new()
+	pb.name = "CaptureProgress"
+	pb.size = Vector2(0.0, 4.0)
+	pb.position = Vector2(0.0, -16.0)
+	pb.color = Color.GREEN
+	add_child(pb)
+	_progress_bar = pb
+	
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
 
@@ -47,11 +58,16 @@ var _income_timer: float = 0.0
 func _process(delta: float) -> void:
 	if is_capturing:
 		capture_timer = minf(capture_time, capture_timer + delta)
+		# Обновляем прогресс-бар
+		var progress: float = capture_timer / capture_time
+		_progress_bar.size = Vector2(40.0 * progress, 4.0)
+		_progress_bar.position = Vector2(-20.0, -16.0)
 		if capture_timer >= capture_time:
 			capture_timer = 0.0
 			is_capturing = false
 			point_owner = current_captor()
 			_update_indicator()
+			_progress_bar.size = Vector2(0.0, 4.0)
 			captured.emit(point_owner)
 	
 	if point_owner == Owner.PLAYER:
@@ -81,19 +97,31 @@ func _update_capture_state() -> void:
 	if total == 0:
 		is_capturing = false
 		capture_timer = 0.0
-		indicator.color = Color.GRAY
+		_update_indicator()  # цвет владельца, не серый
+		_progress_bar.size = Vector2(0.0, 4.0)
 		return
-	
+
+	# Если точка уже захвачена этой стороной — не начинаем захват заново
+	if point_owner == Owner.PLAYER and player_units_inside > 0 and enemy_units_inside == 0:
+		is_capturing = false
+		capture_timer = 0.0
+		_progress_bar.size = Vector2(0.0, 4.0)
+		return
+	if point_owner == Owner.ENEMY and enemy_units_inside > 0 and player_units_inside == 0:
+		is_capturing = false
+		capture_timer = 0.0
+		_progress_bar.size = Vector2(0.0, 4.0)
+		return
+
 	if player_units_inside > 0 and enemy_units_inside == 0:
 		is_capturing = true
-		indicator.color = Color.BLUE
+		# не красим основной квадрат до завершения захвата
 	elif enemy_units_inside > 0 and player_units_inside == 0:
 		is_capturing = true
-		indicator.color = Color.RED
 	else:
 		is_capturing = false
 		capture_timer = 0.0
-		indicator.color = Color.GRAY
+		_progress_bar.size = Vector2(0.0, 4.0)
 
 func current_captor() -> int:
 	if player_units_inside > 0 and enemy_units_inside == 0:

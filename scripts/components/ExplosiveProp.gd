@@ -1,4 +1,6 @@
+class_name ExplosiveProp
 extends StaticBody2D
+
 
 @export var explosion_radius: float = 200.0
 @export var explosion_damage: int = 100
