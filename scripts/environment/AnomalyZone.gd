@@ -32,6 +32,7 @@ func _ready() -> void:
 				rect.color = Color(0.1, 0.6, 0.9, 0.35)
 		add_child(rect)
 
+	add_to_group("anomaly_zones")
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
 

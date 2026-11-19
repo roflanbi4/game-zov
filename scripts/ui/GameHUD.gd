@@ -17,6 +17,12 @@ var _abil_panel: PanelContainer = null
 var _abil_label: Label = null
 var _mine_btn: Button = null
 var _arty_btn: Button = null
+var _flare_btn: Button = null
+var _flashlight_btn: Button = null
+var _flare_mode: bool = false
+var _veteran_btn: Button = null
+var _nvg_btn: Button = null
+var _rankup_btn: Button = null
 
 # Notification popup
 var _notification_label: Label = null
@@ -59,7 +65,7 @@ func _ready() -> void:
 	grid.columns = 4
 	grid.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	grid.offset_left = 10
-	grid.offset_top = -84
+	grid.offset_top = -115
 	grid.offset_bottom = -10
 	add_child(grid)
 	
@@ -103,6 +109,24 @@ func _ready() -> void:
 	ew_btn.text = "Станция РЭБ (220 SP)"
 	ew_btn.pressed.connect(_on_ew_station)
 	grid.add_child(ew_btn)
+
+	var flare_btn := Button.new()
+	flare_btn.text = "Осветительная ракета (30 SP)"
+	flare_btn.pressed.connect(func() -> void:
+		_flare_mode = true
+		_mine_mode = false
+		_artillery_mode = false
+		_grenade_mode = false
+		_show_notification("Кликните по карте для ракеты")
+	)
+	grid.add_child(flare_btn)
+	_flare_btn = flare_btn
+
+	var veteran_btn := Button.new()
+	veteran_btn.text = "Ветераны (220 SP)"
+	veteran_btn.pressed.connect(_on_veteran_squad)
+	grid.add_child(veteran_btn)
+	_veteran_btn = veteran_btn
 
 	_update_sp_label()
 
@@ -180,6 +204,24 @@ func _ready() -> void:
 	gren_btn.pressed.connect(_on_grenade)
 	abil_hbox.add_child(gren_btn)
 
+	var flashlight_btn := Button.new()
+	flashlight_btn.text = "Фонарики: ВКЛ"
+	flashlight_btn.pressed.connect(_on_flashlight_toggle)
+	abil_hbox.add_child(flashlight_btn)
+	_flashlight_btn = flashlight_btn
+
+	var nvg_btn := Button.new()
+	nvg_btn.text = "ПНВ (60 SP)"
+	nvg_btn.pressed.connect(_on_nvg)
+	abil_hbox.add_child(nvg_btn)
+	_nvg_btn = nvg_btn
+
+	var rankup_btn := Button.new()
+	rankup_btn.text = "Повысить ранг (90 SP)"
+	rankup_btn.pressed.connect(_on_rank_up)
+	abil_hbox.add_child(rankup_btn)
+	_rankup_btn = rankup_btn
+
 func _on_sp_changed(new_amount: int) -> void:
 	_update_sp_label()
 
@@ -221,10 +263,44 @@ func _process(delta: float) -> void:
 	if _arty_btn != null:
 		_arty_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.RADIO)
 
+	var soldiers: Array = squad.get("soldiers")
+	if _flashlight_btn != null and squad != null:
+		if soldiers != null and soldiers.size() > 0 and is_instance_valid(soldiers[0]):
+			var on: bool = bool(soldiers[0].get("flashlight_on"))
+			_flashlight_btn.text = "Фонарики: " + ("ВКЛ" if on else "ВЫКЛ")
+	
+	# ПНВ кнопка видима, если в отряде есть боец без ПНВ и не Veteran+
+	if _nvg_btn != null:
+		var any_need_nvg: bool = false
+		for s in soldiers:
+			if not is_instance_valid(s):
+				continue
+			var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+			var rank: int = vc.rank if vc != null else VeterancyComponent.Rank.ROOKIE
+			if not bool(s.get("has_nvg")) and rank < VeterancyComponent.Rank.VETERAN:
+				any_need_nvg = true
+				break
+		_nvg_btn.visible = any_need_nvg
+	
+	# Кнопка повышения ранга видима, если не все Elite
+	if _rankup_btn != null:
+		var all_elite: bool = true
+		for s in soldiers:
+			if not is_instance_valid(s):
+				continue
+			var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+			if vc == null or vc.rank < VeterancyComponent.Rank.ELITE:
+				all_elite = false
+				break
+		_rankup_btn.visible = not all_elite
+
 func _on_day_night_toggled() -> void:
 	set_night(not _is_night)
 
 func set_night(enabled: bool) -> void:
+	var fog: FogOfWarManager = get_tree().get_first_node_in_group("fog_of_war") as FogOfWarManager
+	if fog != null:
+		fog.set_night(enabled)
 	if enabled == _is_night:
 		return
 	var cm: CanvasModulate = get_tree().root.get_node_or_null("CanvasModulate") as CanvasModulate
@@ -280,6 +356,97 @@ func _on_vehicle_spawn() -> void:
 func _on_drone_spawn() -> void:
 	if _eco != null and _eco.spend_sp(75):
 		_spawn_drone()
+
+func _on_veteran_squad() -> void:
+	if _eco != null and _eco.spend_sp(220):
+		_spawn_veteran_squad()
+
+func _on_nvg() -> void:
+	var squad: Node2D = _get_selected_squad()
+	if squad == null:
+		_show_notification("Сначала выделите отряд!")
+		return
+	var soldiers: Array = squad.get("soldiers")
+	if soldiers == null or soldiers.is_empty():
+		return
+	# Проверяем, есть ли уже ПНВ или Veteran+
+	var all_have_nvg_or_veteran: bool = true
+	for s in soldiers:
+		if not is_instance_valid(s):
+			continue
+		var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+		var rank: int = vc.rank if vc != null else VeterancyComponent.Rank.ROOKIE
+		if not bool(s.get("has_nvg")) and rank < VeterancyComponent.Rank.VETERAN:
+			all_have_nvg_or_veteran = false
+			break
+	if all_have_nvg_or_veteran:
+		_show_notification("Отряд уже оснащён ПНВ или состоит из ветеранов!")
+		return
+	if _eco != null and _eco.spend_sp(60):
+		for s in soldiers:
+			if is_instance_valid(s):
+				s.set("has_nvg", true)
+				s.set("flashlight_on", false)
+		_show_notification("ПНВ выданы отряду!")
+
+func _on_rank_up() -> void:
+	var squad: Node2D = _get_selected_squad()
+	if squad == null:
+		_show_notification("Сначала выделите отряд!")
+		return
+	var soldiers: Array = squad.get("soldiers")
+	if soldiers == null or soldiers.is_empty():
+		return
+	# Проверяем, все ли уже Elite
+	var all_elite: bool = true
+	for s in soldiers:
+		if not is_instance_valid(s):
+			continue
+		var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+		if vc == null or vc.rank < VeterancyComponent.Rank.ELITE:
+			all_elite = false
+			break
+	if all_elite:
+		_show_notification("Отряд уже максимального ранга!")
+		return
+	if _eco != null and _eco.spend_sp(90):
+		for s in soldiers:
+			if is_instance_valid(s):
+				var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+				if vc != null:
+					vc.add_xp(100)
+		_show_notification("Опыт добавлен бойцам отряда!")
+
+func _spawn_veteran_squad() -> void:
+	var squad = _SQUAD_SCRIPT.new()
+	squad.position = Vector2(200, 400)
+	for i in range(3):
+		var soldier := Soldier.new()
+		soldier.name = "VetSoldier_" + str(i)
+		soldier.position = Vector2(i * 24 - 24, 0)
+		var nav := NavigationAgent2D.new()
+		nav.name = "NavigationAgent2D"
+		soldier.add_child(nav)
+		var cs := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = 6.0
+		cs.shape = circle
+		soldier.add_child(cs)
+		var rect := ColorRect.new()
+		rect.size = Vector2(16.0, 16.0)
+		rect.position = Vector2(-8.0, -8.0)
+		rect.color = Color(0.15, 0.55, 1.0)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		soldier.add_child(rect)
+		squad.add_child(soldier)
+		soldier.add_to_group("player_units")
+	get_parent().add_child(squad)
+	# Вызываем add_xp ПОСЛЕ добавления в сцену, т.к. VeterancyComponent создаётся в Soldier._ready()
+	for s in squad.get("soldiers"):
+		if is_instance_valid(s):
+			var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+			if vc != null:
+				vc.add_xp(100)
 
 func _spawn_soldier_squad(count: int) -> void:
 	var squad = _SQUAD_SCRIPT.new()
@@ -449,6 +616,8 @@ func _on_place_mine() -> void:
 		_mine_mode = true
 		_artillery_mode = false
 		_grenade_mode = false
+		_flare_mode = false
+
 func _on_artillery_strike() -> void:
 	var target_squad: Node2D = _get_selected_squad()
 	if target_squad == null:
@@ -462,16 +631,44 @@ func _on_artillery_strike() -> void:
 		_artillery_mode = true
 		_mine_mode = false
 		_grenade_mode = false
+		_flare_mode = false
 
 func _on_grenade() -> void:
 	if _eco != null and _eco.spend_sp(30):
 		_grenade_mode = true
 		_mine_mode = false
 		_artillery_mode = false
+		_flare_mode = false
+
+func _on_flashlight_toggle() -> void:
+	var squad: Node2D = _get_selected_squad()
+	if squad == null:
+		return
+	var soldiers: Array = squad.get("soldiers")
+	if soldiers == null or soldiers.is_empty():
+		return
+	var new_state: bool = true
+	if is_instance_valid(soldiers[0]):
+		new_state = not bool(soldiers[0].get("flashlight_on"))
+	for s in soldiers:
+		if is_instance_valid(s):
+			s.set("flashlight_on", new_state)
 
 func _input(event: InputEvent) -> void:
+	if get_viewport().gui_get_hovered_control() != null:
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		var world_pos: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * event.position
+		if _flare_mode:
+			_flare_mode = false
+			if _eco != null and _eco.spend_sp(30):
+				var fog: FogOfWarManager = get_tree().get_first_node_in_group("fog_of_war") as FogOfWarManager
+				if fog != null:
+					fog.add_flare(world_pos, 420.0, 15.0)
+			else:
+				_show_notification("Недостаточно SP")
+			get_viewport().set_input_as_handled()
+			return
 		if _mine_mode:
 			_mine_mode = false
 			var selected: Node2D = _get_selected_squad()
@@ -485,6 +682,7 @@ func _input(event: InputEvent) -> void:
 		elif _grenade_mode:
 			_grenade_mode = false
 			_aoe_damage(world_pos, 50.0, 60)
+
 func _aoe_damage(center: Vector2, radius: float, damage: int) -> void:
 	# Вспышка взрыва
 	var flash: ColorRect = ColorRect.new()

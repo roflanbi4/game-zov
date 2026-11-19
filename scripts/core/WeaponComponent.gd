@@ -33,22 +33,89 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if cooldown_timer > 0.0:
 		cooldown_timer -= delta
+	var desired_radius: float = attack_range
+	var fog: Node = get_tree().get_first_node_in_group("fog_of_war")
+	var is_night: bool = fog != null and fog.get("is_night") == true
+	if is_night and target_group == "player_units":
+		desired_radius = maxf(attack_range, 450.0)
+	var shape_node: CollisionShape2D = detection_area.get_child(0) as CollisionShape2D
+	if shape_node != null:
+		var circle: CircleShape2D = shape_node.shape as CircleShape2D
+		if circle != null and circle.radius != desired_radius:
+			circle.radius = desired_radius
 	if current_target == null or not is_instance_valid(current_target):
 		_find_target()
-	if current_target != null and cooldown_timer <= 0.0:
-		_shoot()
-		cooldown_timer = attack_cooldown
+	if current_target != null:
+		if not current_target.visible:
+			current_target = null
+			return
+		if is_night:
+			var shooter: Node2D = get_parent() as Node2D
+			var allowed: float = _get_night_allowed_distance(shooter, current_target)
+			if global_position.distance_to(current_target.global_position) > allowed:
+				current_target = null
+				return
+		if cooldown_timer <= 0.0:
+			_shoot()
+			cooldown_timer = attack_cooldown
+
+func _get_night_allowed_distance(shooter: Node2D, target: Node2D) -> float:
+	if target_group == "player_units":
+		# Враги стреляют в игрока: фонарик игрока демаскирует на 450px, иначе 130px
+		if target is Soldier:
+			var flashlight: bool = bool(target.get("flashlight_on"))
+			var has_nvg: bool = bool(target.get("has_nvg"))
+			if flashlight and not has_nvg:
+				return 450.0
+		return 130.0
+	else:
+		# Игрок стреляет в врага: дистанция зависит от оснащения стрелка (shooter)
+		if shooter is VehicleUnit:
+			return attack_range  # техника — полный обзор
+		if shooter is Soldier:
+			var vc: VeterancyComponent = shooter.get_node_or_null("VeterancyComponent") as VeterancyComponent
+			var rank: int = vc.rank if vc != null else VeterancyComponent.Rank.ROOKIE
+			var has_nvg: bool = bool(shooter.get("has_nvg"))
+			var flashlight: bool = bool(shooter.get("flashlight_on"))
+			if rank >= VeterancyComponent.Rank.VETERAN:
+				return attack_range  # тепловизор — полная дистанция
+			if has_nvg:
+				return 300.0  # ПНВ
+			if flashlight:
+				return 320.0  # фонарик демаскирует
+			return 140.0  # новичок без ПНВ и с выключенным фонариком
+	return attack_range
 
 func _find_target() -> void:
 	var bodies: Array = detection_area.get_overlapping_bodies()
 	var nearest: Node2D = null
-	var nearest_dist: float = attack_range
+	var nearest_dist: float = INF
+	var fog: Node = get_tree().get_first_node_in_group("fog_of_war")
+	var is_night: bool = fog != null and fog.get("is_night") == true
+	var shooter: Node2D = get_parent() as Node2D
 	for body in bodies:
-		if body is Node2D and target_group in body.get_groups():
-			var dist: float = global_position.distance_to(body.global_position)
-			if dist < nearest_dist:
-				nearest_dist = dist
-				nearest = body
+		if not (body is Node2D):
+			continue
+		if not (target_group in body.get_groups()):
+			continue
+		if not body.visible:
+			continue
+		var dist: float = global_position.distance_to(body.global_position)
+		var allowed: float = attack_range
+		if is_night:
+			if target_group == "player_units":
+				if body is Soldier:
+					var flashlight: bool = bool(body.get("flashlight_on"))
+					var has_nvg: bool = bool(body.get("has_nvg"))
+					if flashlight and not has_nvg:
+						allowed = 450.0
+					else:
+						allowed = 130.0
+			else:
+				allowed = _get_night_allowed_distance(shooter, body)
+		if dist <= allowed and dist < nearest_dist:
+			nearest_dist = dist
+			nearest = body
 	current_target = nearest
 
 func _shoot() -> void:

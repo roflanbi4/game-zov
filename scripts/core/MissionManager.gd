@@ -119,6 +119,11 @@ func _build_base() -> void:
 	var hud := GameHUD.new()
 	hud.name = "GameHUD"
 	get_parent().call_deferred("add_child", hud)
+
+	var fog := FogOfWarManager.new()
+	fog.name = "FogOfWarManager"
+	get_parent().call_deferred("add_child", fog)
+	fog.add_to_group("fog_of_war")
 	_objective_label = Label.new()
 	_objective_label.name = "ObjectiveLabel"
 	_objective_label.position = Vector2(230, 15)

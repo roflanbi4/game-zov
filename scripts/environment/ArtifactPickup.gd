@@ -23,6 +23,7 @@ func _ready() -> void:
 		rect.color = Color(0.9, 0.8, 0.2, 0.9)
 		add_child(rect)
 
+	add_to_group("artifact_pickups")
 	body_entered.connect(_on_body_entered)
 
 func _on_body_entered(body: Node) -> void:
