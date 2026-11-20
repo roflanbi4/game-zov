@@ -16,7 +16,9 @@ var _last_facing: Vector2 = Vector2.RIGHT
 var target_position: Vector2 = Vector2.ZERO
 var squad_controller: Node2D = null
 
+
 func _ready() -> void:
+	safe_margin = 0.08
 	set_physics_process(false)
 	
 	health_component = get_node_or_null("HealthComponent")
@@ -45,6 +47,7 @@ func _ready() -> void:
 
 	var cone := Polygon2D.new()
 	cone.name = "FlashlightCone"
+	cone.z_index = 51
 	cone.polygon = PackedVector2Array([
 		Vector2.ZERO,
 		Vector2(320.0, 0.0).rotated(deg_to_rad(-25.0)),
@@ -110,11 +113,6 @@ func _process(_delta: float) -> void:
 		_last_facing = (weapon.current_target.global_position - global_position).normalized()
 	elif velocity.length() > 1.0:
 		_last_facing = velocity.normalized()
-
-	# Авто-выключение фонарика при ПНВ или ранге Veteran+
-	if has_nvg or rank >= VeterancyComponent.Rank.VETERAN:
-		if flashlight_on:
-			flashlight_on = false
 
 	# Видимость конуса фонарика: только Rookie без ПНВ, только ночь, только_player_units, только flashlight_on
 	cone.visible = is_night and rank == VeterancyComponent.Rank.ROOKIE and not has_nvg and is_in_group("player_units") and flashlight_on

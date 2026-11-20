@@ -137,4 +137,8 @@ func _apply_rank_bonuses() -> void:
 		weapon_component.attack_damage = int(round(_base_attack_damage * _damage_multiplier()))
 	if morale_component != null and is_instance_valid(morale_component):
 		morale_component.cowardice_multiplier = _cowardice_for_rank()
+	if rank == Rank.VETERAN:
+		var parent_soldier: Node = get_parent()
+		if parent_soldier != null and bool(parent_soldier.get("flashlight_on")):
+			parent_soldier.set("flashlight_on", false)
 	_update_xp_bar_visual()

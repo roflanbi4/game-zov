@@ -47,15 +47,21 @@ func _draw() -> void:
 		draw_rect(rect, selection_color, true)
 		draw_rect(rect, border_color, false, 2.0)
 
+func _clear_selection() -> void:
+	for unit in selected_units:
+		if is_instance_valid(unit):
+			unit.modulate = Color.WHITE
+			var visual: CanvasItem = unit.get_node_or_null("ColorRect") as CanvasItem
+			if visual != null:
+				visual.modulate = Color.WHITE
+	selected_units.clear()
+	selected_squads.clear()
+
 func _select_units_in_box() -> void:
 	var rect: Rect2 = Rect2(selection_start.min(selection_end), (selection_start - selection_end).abs())
 	rect = rect.grow(12.0)
 	
-	for unit in selected_units:
-		if is_instance_valid(unit):
-			unit.modulate = Color.WHITE
-	selected_units.clear()
-	selected_squads.clear()
+	_clear_selection()
 	
 	var squads: Array = get_tree().get_nodes_in_group("player_squads")
 	for squad_node in squads:
@@ -73,7 +79,10 @@ func _select_units_in_box() -> void:
 			selected_squads.append(squad)
 			for soldier in squad.soldiers:
 				if is_instance_valid(soldier):
-					soldier.modulate = highlight_color
+					var visual: CanvasItem = soldier.get_node_or_null("ColorRect") as CanvasItem
+					if visual != null:
+						visual.modulate = highlight_color
+					soldier.modulate = Color.WHITE
 					selected_units.append(soldier)
 	
 	# Выделение одиночной техники и дронов

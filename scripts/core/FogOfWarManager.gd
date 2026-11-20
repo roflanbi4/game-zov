@@ -1,28 +1,49 @@
 class_name FogOfWarManager
 extends Node2D
 
-const IMG_W: int = 192
-const IMG_H: int = 108
-const SCALE: int = 10
+const SUB_W: int = 480
+const SUB_H: int = 270
+const SCALE: float = 4.0
 
 var is_night: bool = false
-var _image: Image
-var _texture: ImageTexture
 var _rect: TextureRect
 var _flares: Array = []
 var _time: float = 0.0
 var _night_synced: bool = false
 var _update_timer: float = 0.0
+var _sub_viewport: SubViewport
+var _fog_drawer: Node2D
+var _fog_base: ColorRect
 
 func _ready() -> void:
 	z_index = 50
-	_image = Image.create(IMG_W, IMG_H, false, Image.FORMAT_RGBA8)
-	_texture = ImageTexture.create_from_image(_image)
+	add_to_group("fog_of_war")
+
+	_sub_viewport = SubViewport.new()
+	_sub_viewport.size = Vector2(SUB_W, SUB_H)
+	_sub_viewport.transparent_bg = true
+	_sub_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_sub_viewport)
+
+	_fog_base = ColorRect.new()
+	_fog_base.name = "FogBase"
+	_fog_base.size = Vector2(SUB_W, SUB_H)
+	_fog_base.color = Color(0, 0, 0, 0.45)
+	_sub_viewport.add_child(_fog_base)
+
+	_fog_drawer = Node2D.new()
+	_fog_drawer.name = "FogDrawer"
+	_fog_drawer.set_script(preload("res://scripts/core/FogDrawer.gd"))
+	var mat := CanvasItemMaterial.new()
+	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_SUB
+	_fog_drawer.material = mat
+	_sub_viewport.add_child(_fog_drawer)
+
 	_rect = TextureRect.new()
 	_rect.name = "FogRect"
-	_rect.size = Vector2(IMG_W, IMG_H)
+	_rect.size = Vector2(SUB_W, SUB_H)
 	_rect.scale = Vector2(SCALE, SCALE)
-	_rect.texture = _texture
+	_rect.texture = _sub_viewport.get_texture()
 	_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_rect)
@@ -40,6 +61,11 @@ func _try_sync_night() -> void:
 
 func set_night(enabled: bool) -> void:
 	is_night = enabled
+	if _fog_base != null:
+		_fog_base.color = Color(0, 0, 0, 0.90 if enabled else 0.45)
+	if _fog_drawer != null:
+		_fog_drawer.update_night_alpha(enabled)
+		_fog_drawer.queue_redraw()
 
 func add_flare(pos: Vector2, radius: float = 420.0, duration: float = 15.0) -> void:
 	var node := _make_flare_visual(pos, radius)
@@ -79,9 +105,10 @@ func _process(delta: float) -> void:
 			var pulse: float = 0.8 + 0.2 * sin(_time * 4.0)
 			node.modulate.a = base_a * pulse
 	_update_timer += delta
-	if _update_timer >= 0.05:
+	if _update_timer >= 0.1:
 		_update_timer = 0.0
 		_update_fog()
+
 func _collect_sources() -> Array:
 	var tree: SceneTree = get_tree()
 	if tree == null:
@@ -139,34 +166,10 @@ func _collect_sources() -> Array:
 	return sources
 
 func _update_fog() -> void:
-	var base_alpha: float = 0.45 if not is_night else 0.90
-	for y in range(IMG_H):
-		for x in range(IMG_W):
-			_image.set_pixel(x, y, Color(0.0, 0.0, 0.0, base_alpha))
 	var sources: Array = _collect_sources()
-	for src in sources:
-		var pos: Vector2 = src["pos"]
-		var radius: float = float(src["radius"])
-		var r_px: int = int(ceil(radius / SCALE)) + 1
-		var cx: int = int(pos.x / SCALE)
-		var cy: int = int(pos.y / SCALE)
-		for py in range(max(0, cy - r_px), min(IMG_H, cy + r_px + 1)):
-			for px in range(max(0, cx - r_px), min(IMG_W, cx + r_px + 1)):
-				var wpos := Vector2((px + 0.5) * SCALE, (py + 0.5) * SCALE)
-				var dist: float = wpos.distance_to(pos)
-				var visible: bool = false
-				if bool(src["cone"]):
-					if dist <= radius:
-						var dir: Vector2 = src["dir"]
-						var ang: float = abs(dir.angle_to(wpos - pos))
-						if ang <= deg_to_rad(float(src["half_deg"])):
-							visible = true
-				else:
-					if dist <= radius:
-						visible = true
-				if visible:
-					_image.set_pixel(px, py, Color(0.0, 0.0, 0.0, 0.0))
-	_texture.update(_image)
+	_fog_drawer.sources = sources
+	_fog_drawer.update_night_alpha(is_night)
+	_fog_drawer.queue_redraw()
 	_update_visibility(sources)
 
 func _source_sees(src: Dictionary, pos: Vector2) -> bool:
