@@ -3,6 +3,7 @@ extends Node2D
 @export var speed: float = 600.0
 @export var damage: int = 25
 @export var target_group: String = "enemy_units"
+@export var morale_penalty: int = 0
 
 var target_position: Vector2 = Vector2.ZERO
 var active: bool = true
@@ -34,6 +35,10 @@ func _hit_target() -> void:
 					obj.take_damage(damage)
 				else:
 					health.take_damage(damage)
+			if morale_penalty > 0:
+				var morale: MoraleComponent = obj.get_node_or_null("MoraleComponent") as MoraleComponent
+				if morale != null:
+					morale.reduce_morale(float(morale_penalty))
 			_award_xp()
 			break
 	queue_free()

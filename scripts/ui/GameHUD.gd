@@ -8,6 +8,16 @@ var _eco: EconomyManager
 
 const GRENADE_MAX_RANGE: float = 260.0
 const MINE_MAX_RANGE: float = 65.0
+const BUILD_MAX_RANGE: float = 85.0
+
+var _build_fort_type: int = -1
+var _sandbag_btn: Button = null
+var _barbed_btn: Button = null
+var _turret_btn: Button = null
+
+var _build_anchor_set: bool = false
+var _build_anchor_pos: Vector2 = Vector2.ZERO
+var _build_rotation: float = 0.0
 
 # Ability panel state
 var _selected_squad: Node2D = null
@@ -28,6 +38,7 @@ var _flashlight_btn: Button = null
 var _flare_mode: bool = false
 var _veteran_btn: Button = null
 var _nvg_btn: Button = null
+var _cancel_mode_btn: Button = null
 
 # Notification popup
 var _notification_label: Label = null
@@ -39,6 +50,7 @@ const _DRONE_SCRIPT := preload("res://scripts/units/DroneUnit.gd")
 const _MUTANT_SPAWNER_SCRIPT := preload("res://scripts/ai/MutantWaveSpawner.gd")
 
 func _ready() -> void:
+	add_to_group("game_hud")
 	_eco = get_tree().get_first_node_in_group("economy") as EconomyManager
 	if _eco != null:
 		_eco.sp_changed.connect(_on_sp_changed)
@@ -198,6 +210,39 @@ func _ready() -> void:
 	abil_hbox.add_child(mine_btn)
 	_mine_btn = mine_btn
 
+	var sandbag_btn := Button.new()
+	sandbag_btn.text = "Мешки (35 SP)"
+	sandbag_btn.pressed.connect(func() -> void:
+		if _eco != null and _eco.get_sp() >= 35:
+			_build_fort_type = FieldFortification.FortType.SANDBAGS
+		else:
+			_show_notification("Недостаточно SP")
+	)
+	abil_hbox.add_child(sandbag_btn)
+	_sandbag_btn = sandbag_btn
+
+	var barbed_btn := Button.new()
+	barbed_btn.text = "Проволока (25 SP)"
+	barbed_btn.pressed.connect(func() -> void:
+		if _eco != null and _eco.get_sp() >= 25:
+			_build_fort_type = FieldFortification.FortType.BARBED_WIRE
+		else:
+			_show_notification("Недостаточно SP")
+	)
+	abil_hbox.add_child(barbed_btn)
+	_barbed_btn = barbed_btn
+
+	var turret_btn := Button.new()
+	turret_btn.text = "Турель (110 SP)"
+	turret_btn.pressed.connect(func() -> void:
+		if _eco != null and _eco.get_sp() >= 110:
+			_build_fort_type = FieldFortification.FortType.AUTO_TURRET
+		else:
+			_show_notification("Недостаточно SP")
+	)
+	abil_hbox.add_child(turret_btn)
+	_turret_btn = turret_btn
+
 	var arty_btn := Button.new()
 	arty_btn.text = "Артудар (100 SP)"
 	arty_btn.pressed.connect(_on_artillery_strike)
@@ -221,6 +266,13 @@ func _ready() -> void:
 	abil_hbox.add_child(nvg_btn)
 	_nvg_btn = nvg_btn
 
+	var cancel_btn := Button.new()
+	cancel_btn.text = "Отмена"
+	cancel_btn.visible = false
+	cancel_btn.pressed.connect(_on_cancel_mode_pressed)
+	abil_hbox.add_child(cancel_btn)
+	_cancel_mode_btn = cancel_btn
+
 
 	_aim_overlay = Node2D.new()
 	_aim_overlay.name = "AimOverlay"
@@ -234,6 +286,44 @@ func _update_sp_label() -> void:
 	if _sp_label != null and _eco != null:
 		_sp_label.text = "SP: " + str(_eco.get_sp())
 func _on_aim_overlay_draw() -> void:
+	if _build_fort_type >= 0:
+		var selected: Node2D = _get_selected_squad()
+		if selected == null:
+			return
+		var soldiers: Array = selected.get("soldiers")
+		if soldiers == null:
+			return
+		var center: Vector2 = Vector2.ZERO
+		var count: int = 0
+		for s in soldiers:
+			if is_instance_valid(s) and s is Node2D:
+				center += (s as Node2D).global_position
+				count += 1
+		if count == 0:
+			return
+		center /= float(count)
+		var mouse_world: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * get_viewport().get_mouse_position()
+		if _build_anchor_set == false:
+			var in_range: bool = center.distance_to(mouse_world) <= BUILD_MAX_RANGE
+			var color: Color = Color(0.2, 1.0, 0.3, 0.45) if in_range else Color(1.0, 0.2, 0.2, 0.45)
+			_aim_overlay.draw_arc(center, BUILD_MAX_RANGE, 0.0, TAU, 48, Color(0.9, 0.9, 0.9, 0.5), 1.5)
+			_aim_overlay.draw_line(center, mouse_world, color, 1.5)
+			_aim_overlay.draw_circle(mouse_world, 8.0, color)
+		else:
+			_build_rotation = (mouse_world - _build_anchor_pos).angle() + PI / 2.0
+			_aim_overlay.draw_line(_build_anchor_pos, mouse_world, Color(0.9, 0.9, 0.2, 0.7), 2.0)
+			var fort_size: Vector2 = Vector2(48.0, 16.0)
+			match _build_fort_type:
+				FieldFortification.FortType.SANDBAGS:
+					fort_size = Vector2(48.0, 16.0)
+				FieldFortification.FortType.BARBED_WIRE:
+					fort_size = Vector2(56.0, 14.0)
+				FieldFortification.FortType.AUTO_TURRET:
+					fort_size = Vector2(22.0, 22.0)
+			_aim_overlay.draw_set_transform(_build_anchor_pos, _build_rotation, Vector2.ONE)
+			_aim_overlay.draw_rect(Rect2(-fort_size / 2.0, fort_size), Color(0.2, 1.0, 0.3, 0.65), false, 2.0)
+			_aim_overlay.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
 	if not _grenade_mode and not _mine_mode:
 		return
 	var selected: Node2D = _get_selected_squad()
@@ -267,8 +357,10 @@ func _process(delta: float) -> void:
 			_notification_label.queue_free()
 			_notification_label = null
 
-	if _aim_overlay != null and (_grenade_mode or _mine_mode):
+	if _aim_overlay != null:
 		_aim_overlay.queue_redraw()
+	if _cancel_mode_btn != null:
+		_cancel_mode_btn.visible = (_mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0)
 
 	if _abil_panel == null or _abil_label == null:
 		return
@@ -294,6 +386,12 @@ func _process(delta: float) -> void:
 
 	if _mine_btn != null:
 		_mine_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER)
+		if _sandbag_btn != null:
+			_sandbag_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER)
+		if _barbed_btn != null:
+			_barbed_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER)
+		if _turret_btn != null:
+			_turret_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER)
 	if _arty_btn != null:
 		_arty_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.RADIO)
 
@@ -687,19 +785,31 @@ func _input(event: InputEvent) -> void:
 		return
 	# Cancel any active mode on Esc or RMB
 	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed:
-		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode:
+		if _build_anchor_set:
+			_build_anchor_set = false
+			get_viewport().set_input_as_handled()
+			return
+		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0:
 			_mine_mode = false
 			_grenade_mode = false
 			_artillery_mode = false
 			_flare_mode = false
+			_build_fort_type = -1
+			_build_anchor_set = false
 			get_viewport().set_input_as_handled()
 			return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode:
+		if _build_anchor_set:
+			_build_anchor_set = false
+			get_viewport().set_input_as_handled()
+			return
+		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0:
 			_mine_mode = false
 			_grenade_mode = false
 			_artillery_mode = false
 			_flare_mode = false
+			_build_fort_type = -1
+			_build_anchor_set = false
 			get_viewport().set_input_as_handled()
 			return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -762,6 +872,57 @@ func _input(event: InputEvent) -> void:
 					_aoe_damage(world_pos, 50.0, 60)
 				else:
 					_show_notification("Недостаточно SP")
+			return
+		if _build_fort_type >= 0:
+			get_viewport().set_input_as_handled()
+			var selected: Node2D = _get_selected_squad()
+			if selected == null:
+				_build_fort_type = -1
+				_build_anchor_set = false
+				return
+			if not _build_anchor_set:
+				var soldiers: Array = selected.get("soldiers")
+				var center: Vector2 = Vector2.ZERO
+				var count: int = 0
+				for s in soldiers:
+					if is_instance_valid(s) and s is Node2D:
+						center += (s as Node2D).global_position
+						count += 1
+				if count > 0:
+					center /= float(count)
+					if center.distance_to(world_pos) > BUILD_MAX_RANGE:
+						_show_notification("Слишком далеко!")
+						return
+				_build_anchor_pos = world_pos
+				_build_anchor_set = true
+				_build_rotation = 0.0
+				_show_notification("Поверните мышью и нажмите ЛКМ")
+			else:
+				var fort_type: int = _build_fort_type
+				_build_fort_type = -1
+				_build_anchor_set = false
+				var spec: SpecialistComponent = selected.get_node_or_null("SpecialistComponent") as SpecialistComponent
+				if spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER:
+					var cost: int = 0
+					match fort_type:
+						FieldFortification.FortType.SANDBAGS:
+							cost = 35
+						FieldFortification.FortType.BARBED_WIRE:
+							cost = 25
+						FieldFortification.FortType.AUTO_TURRET:
+							cost = 110
+					if _eco != null and _eco.spend_sp(cost):
+						spec.build_fortification(_build_anchor_pos, fort_type, _build_rotation)
+					else:
+						_show_notification("Недостаточно SP")
+
+func _on_cancel_mode_pressed() -> void:
+	_mine_mode = false
+	_grenade_mode = false
+	_artillery_mode = false
+	_flare_mode = false
+	_build_fort_type = -1
+	_build_anchor_set = false
 
 func _aoe_damage(center: Vector2, radius: float, damage: int) -> void:
 	# Вспышка взрыва

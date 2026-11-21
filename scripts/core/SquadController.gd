@@ -56,6 +56,14 @@ func on_soldier_died(soldier: Node2D) -> void:
 				if m != null:
 					m.reduce_morale(20.0)
 	if is_instance_valid(soldier):
+		if soldier.is_in_group("enemy_units") and randf() < 0.35:
+			call_deferred("_spawn_loot", soldier.global_position)
 		soldier.queue_free()
 	if soldiers.is_empty():
 		queue_free()
+
+func _spawn_loot(pos: Vector2) -> void:
+	var crate := LootCrate.new()
+	crate.loot_type = randi() % 3
+	get_tree().current_scene.add_child(crate)
+	crate.global_position = pos

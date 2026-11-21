@@ -161,6 +161,9 @@ func _collect_sources() -> Array:
 			var owner_val: int = int(cp.get("point_owner"))
 			if owner_val == ControlPoint.Owner.PLAYER:
 				sources.append({"pos": (cp as Node2D).global_position, "radius": 250.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
+	for t in get_tree().get_nodes_in_group("player_turrets"):
+		if is_instance_valid(t) and t is Node2D:
+			sources.append({"pos": (t as Node2D).global_position, "radius": 340.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
 	for f in _flares:
 		sources.append({"pos": f["pos"], "radius": float(f["radius"]), "thermal": false, "cone": false, "dir": Vector2.ZERO})
 	return sources
@@ -211,6 +214,11 @@ func _update_visibility(sources: Array) -> void:
 			if not is_instance_valid(node) or not (node is Node2D):
 				continue
 			(node as Node).visible = _is_visible((node as Node2D).global_position, sources)
+	for g in ["loot_crates"]:
+		for node in tree.get_nodes_in_group(g):
+			if not is_instance_valid(node) or not (node is Node2D):
+				continue
+			(node as Node).visible = _is_visible((node as Node2D).global_position, sources)
 
 func _exit_tree() -> void:
 	_restore_all_visibility()
@@ -219,7 +227,7 @@ func _restore_all_visibility() -> void:
 	var tree: SceneTree = get_tree()
 	if tree == null:
 		return
-	var groups: Array[String] = ["enemy_units", "enemy_vehicles", "enemy_drones", "mutants", "anomaly_zones", "artifact_pickups"]
+	var groups: Array[String] = ["enemy_units", "enemy_vehicles", "enemy_drones", "mutants", "anomaly_zones", "artifact_pickups", "loot_crates"]
 	for g in groups:
 		for node in tree.get_nodes_in_group(g):
 			if is_instance_valid(node):

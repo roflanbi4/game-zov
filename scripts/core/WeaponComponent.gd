@@ -6,11 +6,14 @@ extends Node2D
 @export var attack_cooldown: float = 1.0
 @export var projectile_speed: float = 600.0
 @export var target_group: String = "enemy_units"
+@export var burst_enabled: bool = true
 
 var detection_area: Area2D
 var muzzle: Node2D
 var cooldown_timer: float = 0.0
 var current_target: Node2D = null
+var _burst_count: int = 0
+var _burst_timer: float = 0.0
 
 func _ready() -> void:
 	detection_area = get_node_or_null("DetectionArea")
@@ -33,6 +36,8 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if cooldown_timer > 0.0:
 		cooldown_timer -= delta
+	if _burst_timer > 0.0:
+		_burst_timer -= delta
 	var desired_radius: float = attack_range
 	var fog: Node = get_tree().get_first_node_in_group("fog_of_war")
 	var is_night: bool = fog != null and fog.get("is_night") == true
@@ -55,9 +60,26 @@ func _process(delta: float) -> void:
 			if global_position.distance_to(current_target.global_position) > allowed:
 				current_target = null
 				return
+		var dist_to_target: float = global_position.distance_to(current_target.global_position)
 		if cooldown_timer <= 0.0:
-			_shoot()
-			cooldown_timer = attack_cooldown
+			if burst_enabled and _burst_count < 3 and dist_to_target > 120.0 and dist_to_target <= 260.0:
+				if _burst_timer <= 0.0:
+					_shoot()
+					_burst_count += 1
+					_burst_timer = 0.13
+					if _burst_count >= 3:
+						_burst_count = 0
+						_burst_timer = 0.0
+						cooldown_timer = attack_cooldown
+			elif dist_to_target <= 120.0:
+				_shoot()
+				cooldown_timer = randf_range(0.20, 0.34)
+			elif dist_to_target > 260.0:
+				_shoot()
+				cooldown_timer = attack_cooldown * randf_range(0.9, 1.35)
+			else:
+				_shoot()
+				cooldown_timer = attack_cooldown
 
 func _get_night_allowed_distance(shooter: Node2D, target: Node2D) -> float:
 	if target_group == "player_units":
@@ -134,3 +156,5 @@ func _shoot() -> void:
 	bullet.global_position = muzzle.global_position
 	get_tree().root.add_child(bullet)
 	bullet.setup(current_target.global_position, projectile_speed, attack_damage, target_group)
+	if has_meta("morale_penalty"):
+		bullet.morale_penalty = int(get_meta("morale_penalty"))

@@ -106,4 +106,12 @@ func take_damage(amount: int) -> void:
 		health_component.take_damage(reduced)
 
 func _on_died(_soldier: Node2D) -> void:
+	if is_enemy and randf() < 0.60:
+		call_deferred("_spawn_loot", global_position)
 	queue_free()
+
+func _spawn_loot(pos: Vector2) -> void:
+	var crate := LootCrate.new()
+	crate.loot_type = randi() % 3
+	get_tree().current_scene.add_child(crate)
+	crate.global_position = pos

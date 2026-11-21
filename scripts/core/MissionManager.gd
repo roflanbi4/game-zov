@@ -108,6 +108,9 @@ func _clear_world() -> void:
 		for child in main.get_children():
 			if child.name not in keep:
 				child.queue_free()
+	for n in get_tree().get_nodes_in_group("mission_cleanup"):
+		if is_instance_valid(n):
+			n.queue_free()
 	var cm = get_tree().root.get_node_or_null("CanvasModulate")
 	if cm != null:
 		cm.queue_free()

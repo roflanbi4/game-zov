@@ -194,3 +194,12 @@ func _on_mine_body_entered(body: Node2D, mine: Area2D) -> void:
 				elif enemy.has_method("take_damage"):
 					enemy.take_damage(damage)
 	mine.queue_free()
+
+func build_fortification(pos: Vector2, fort_type: int, rot: float = 0.0) -> void:
+	if specialist_type != Type.SAPPER:
+		return
+	var fort := FieldFortification.new()
+	fort.fort_type = fort_type
+	fort.rotation = rot
+	get_tree().current_scene.add_child(fort)
+	fort.global_position = pos
