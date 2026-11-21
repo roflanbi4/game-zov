@@ -164,6 +164,16 @@ func _collect_sources() -> Array:
 	for t in get_tree().get_nodes_in_group("player_turrets"):
 		if is_instance_valid(t) and t is Node2D:
 			sources.append({"pos": (t as Node2D).global_position, "radius": 340.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
+	for cf in get_tree().get_nodes_in_group("campfires"):
+		if is_instance_valid(cf) and cf is Node2D:
+			var cf_pos: Vector2 = (cf as Node2D).global_position
+			var ally_near: bool = false
+			for s in sources:
+				if cf_pos.distance_to(s["pos"] as Vector2) <= 320.0:
+					ally_near = true
+					break
+			if ally_near:
+				sources.append({"pos": cf_pos, "radius": 140.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
 	for f in _flares:
 		sources.append({"pos": f["pos"], "radius": float(f["radius"]), "thermal": false, "cone": false, "dir": Vector2.ZERO})
 	return sources

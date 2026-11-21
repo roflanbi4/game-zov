@@ -73,7 +73,7 @@ func _heal_squad(body: Node2D) -> void:
 				if health != null:
 					health.current_hp = mini(health.max_hp, health.current_hp + 50)
 				if morale != null:
-					morale.current_morale = mini(morale.max_morale, morale.current_morale + 25.0)
+					morale.current_morale = minf(morale.max_morale, morale.current_morale + 25.0)
 	else:
 		var health: HealthComponent = body.get_node_or_null("HealthComponent") as HealthComponent
 		if health != null:

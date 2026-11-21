@@ -99,6 +99,11 @@ func _start_mission(m: int) -> void:
 		Mission.M4: _build_mission_4()
 		Mission.SANDBOX: _build_sandbox()
 		_: pass
+	var env: Node2D = preload("res://scripts/environment/ZoneEnvironment.gd").new()
+	env.z_index = 0
+	get_parent().add_child(env)
+	var seed_val: int = int(m) * 1337 if m != Mission.SANDBOX else 0
+	env.generate_map(seed_val)
 	_mission_start_time = Time.get_ticks_msec() / 1000.0
 
 func _clear_world() -> void:

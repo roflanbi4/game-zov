@@ -18,6 +18,7 @@ var squad_controller: Node2D = null
 
 
 func _ready() -> void:
+	z_index = 5
 	safe_margin = 0.08
 	set_physics_process(false)
 	

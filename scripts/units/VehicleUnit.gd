@@ -19,6 +19,7 @@ var weapon: WeaponComponent
 var nav_agent: NavigationAgent2D
 
 func _ready() -> void:
+	z_index = 5
 	if is_enemy:
 		add_to_group("enemy_vehicles")
 		add_to_group("enemy_units")
