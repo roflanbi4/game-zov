@@ -106,47 +106,56 @@ func _ready() -> void:
 	
 	var rookie_btn := Button.new()
 	rookie_btn.text = "Rookie Squad (100 SP)"
+	rookie_btn.tooltip_text = "Нанять дешёвый 3-х человек отряд новобранцев"
 	rookie_btn.pressed.connect(_on_rookie_squad)
 	grid.add_child(rookie_btn)
 	
 	var vehicle_btn := Button.new()
 	vehicle_btn.text = "Vehicle (BTR) (250 SP)"
+	vehicle_btn.tooltip_text = "БТР: бронированная техника с пулемётом"
 	vehicle_btn.pressed.connect(_on_vehicle_spawn)
 	grid.add_child(vehicle_btn)
 	
 	var drone_btn := Button.new()
 	drone_btn.text = "FPV Drone (75 SP)"
+	drone_btn.tooltip_text = "FPV-камикадзе: высокоскоростной дрон-самоубийца"
 	drone_btn.pressed.connect(_on_drone_spawn)
 	grid.add_child(drone_btn)
 	
 	var specialist_btn := Button.new()
 	specialist_btn.text = "Specialist (Medic) (80 SP)"
+	specialist_btn.tooltip_text = "Прикрепить медика к выбранному отряду"
 	specialist_btn.pressed.connect(_on_specialist_medic)
 	grid.add_child(specialist_btn)
 	
 	var at_btn := Button.new()
 	at_btn.text = "Бронебойщики (140 SP)"
+	at_btn.tooltip_text = "Отряд с ПТ-средствами против техники"
 	at_btn.pressed.connect(_on_at_squad)
 
 	grid.add_child(at_btn)
 
 	var sapper_btn := Button.new()
 	sapper_btn.text = "Сапер (80 SP)"
+	sapper_btn.tooltip_text = "Сапёр: мины, проволока, разминирование аномалий"
 	sapper_btn.pressed.connect(_on_sapper)
 	grid.add_child(sapper_btn)
 
 	var radio_btn := Button.new()
 	radio_btn.text = "Радист (90 SP)"
+	radio_btn.tooltip_text = "Радист: артудары, дым, увеличенная дальность"
 	radio_btn.pressed.connect(_on_radio)
 	grid.add_child(radio_btn)
 
 	var ew_btn := Button.new()
 	ew_btn.text = "Станция РЭБ (220 SP)"
+	ew_btn.tooltip_text = "РЭБ-станция: глушит вражеские дроны"
 	ew_btn.pressed.connect(_on_ew_station)
 	grid.add_child(ew_btn)
 
 	var flare_btn := Button.new()
 	flare_btn.text = "Осветительная ракета (30 SP)"
+	flare_btn.tooltip_text = "Подсветить область ночью"
 	flare_btn.pressed.connect(func() -> void:
 		_flare_mode = true
 		_mine_mode = false
@@ -159,6 +168,7 @@ func _ready() -> void:
 
 	var veteran_btn := Button.new()
 	veteran_btn.text = "Ветераны (220 SP)"
+	veteran_btn.tooltip_text = "Опытный отряд с повышенной меткостью и моралью"
 	veteran_btn.pressed.connect(_on_veteran_squad)
 	grid.add_child(veteran_btn)
 	_veteran_btn = veteran_btn
@@ -206,7 +216,7 @@ func _ready() -> void:
 	var abil_panel := PanelContainer.new()
 	abil_panel.name = "AbilityPanel"
 	abil_panel.position = Vector2(10, 100)
-	abil_panel.size = Vector2(260, 70)
+	abil_panel.size = Vector2(260, 105)
 	abil_panel.visible = false
 	add_child(abil_panel)
 	_abil_panel = abil_panel
@@ -224,12 +234,14 @@ func _ready() -> void:
 
 	var mine_btn := Button.new()
 	mine_btn.text = "Мину (40 SP)"
+	mine_btn.tooltip_text = "Поставить мину (требуется сапёр)"
 	mine_btn.pressed.connect(_on_place_mine)
 	abil_hbox.add_child(mine_btn)
 	_mine_btn = mine_btn
 
 	var sandbag_btn := Button.new()
 	sandbag_btn.text = "Мешки (35 SP)"
+	sandbag_btn.tooltip_text = "Построить мешки (укрытие)"
 	sandbag_btn.pressed.connect(func() -> void:
 		if _eco != null and _eco.get_sp() >= 35:
 			_build_fort_type = FieldFortification.FortType.SANDBAGS
@@ -241,6 +253,7 @@ func _ready() -> void:
 
 	var barbed_btn := Button.new()
 	barbed_btn.text = "Проволока (25 SP)"
+	barbed_btn.tooltip_text = "Построить проволоку (замедление)"
 	barbed_btn.pressed.connect(func() -> void:
 		if _eco != null and _eco.get_sp() >= 25:
 			_build_fort_type = FieldFortification.FortType.BARBED_WIRE
@@ -252,6 +265,7 @@ func _ready() -> void:
 
 	var turret_btn := Button.new()
 	turret_btn.text = "Турель (110 SP)"
+	turret_btn.tooltip_text = "Построить автотурель"
 	turret_btn.pressed.connect(func() -> void:
 		if _eco != null and _eco.get_sp() >= 110:
 			_build_fort_type = FieldFortification.FortType.AUTO_TURRET
@@ -263,33 +277,73 @@ func _ready() -> void:
 
 	var arty_btn := Button.new()
 	arty_btn.text = "Артудар (100 SP)"
+	arty_btn.tooltip_text = "Артиллерийский удар по области"
 	arty_btn.pressed.connect(_on_artillery_strike)
 	abil_hbox.add_child(arty_btn)
 	_arty_btn = arty_btn
 
 	var gren_btn := Button.new()
 	gren_btn.text = "Граната (30 SP)"
+	gren_btn.tooltip_text = "Бросить гранату"
 	gren_btn.pressed.connect(_on_grenade)
 	abil_hbox.add_child(gren_btn)
 
 	var flashlight_btn := Button.new()
 	flashlight_btn.text = "Фонарики: ВКЛ"
+	flashlight_btn.tooltip_text = "Переключить фонарики отряда"
 	flashlight_btn.pressed.connect(_on_flashlight_toggle)
 	abil_hbox.add_child(flashlight_btn)
 	_flashlight_btn = flashlight_btn
 
 	var nvg_btn := Button.new()
 	nvg_btn.text = "ПНВ (60 SP)"
+	nvg_btn.tooltip_text = "Купить ПНВ для отряда"
 	nvg_btn.pressed.connect(_on_nvg)
 	abil_hbox.add_child(nvg_btn)
 	_nvg_btn = nvg_btn
 
 	var cancel_btn := Button.new()
 	cancel_btn.text = "Отмена"
+	cancel_btn.tooltip_text = "Отменить текущий режим строительства"
 	cancel_btn.visible = false
 	cancel_btn.pressed.connect(_on_cancel_mode_pressed)
 	abil_hbox.add_child(cancel_btn)
 	_cancel_mode_btn = cancel_btn
+
+	# Вторая строка: тактические команды
+	var tac_hbox := HBoxContainer.new()
+	abil_vbox.add_child(tac_hbox)
+
+	var attack_move_btn := Button.new()
+	attack_move_btn.text = "Атака (Q)"
+	attack_move_btn.tooltip_text = "Режим атаки-движения: юниты идут к точке и атакуют врагов по пути"
+	attack_move_btn.pressed.connect(func() -> void:
+		var sm: Node = get_parent().get_node_or_null("SelectionManager")
+		if sm != null:
+			sm.set("attack_move_mode", true)
+		_show_notification("Режим атаки-движения: кликните ПКМ")
+	)
+	tac_hbox.add_child(attack_move_btn)
+
+	var hold_btn := Button.new()
+	hold_btn.text = "Стоять (H)"
+	hold_btn.tooltip_text = "Остановить выделенные отряды и удерживать позицию"
+	hold_btn.pressed.connect(func() -> void:
+		var sm: Node = get_parent().get_node_or_null("SelectionManager")
+		if sm != null and sm.has_method("issue_hold"):
+			sm.call("issue_hold")
+	)
+	tac_hbox.add_child(hold_btn)
+
+	var retreat_btn := Button.new()
+	retreat_btn.text = "Отступить (R)"
+	retreat_btn.tooltip_text = "Отступить к ближайшей своей точке или базе"
+	retreat_btn.pressed.connect(func() -> void:
+		var sm: Node = get_parent().get_node_or_null("SelectionManager")
+		if sm != null and sm.has_method("issue_retreat"):
+			sm.call("issue_retreat")
+	)
+	tac_hbox.add_child(retreat_btn)
 
 
 	_aim_overlay = Node2D.new()

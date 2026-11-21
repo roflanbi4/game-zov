@@ -9,6 +9,8 @@ var selection_start: Vector2 = Vector2.ZERO
 var selection_end: Vector2 = Vector2.ZERO
 var selected_units: Array[CharacterBody2D] = []
 var selected_squads: Array = []
+var control_groups: Dictionary = {}
+var attack_move_mode: bool = false
 
 signal selection_changed(selected_units: Array[CharacterBody2D], selected_squads: Array)
 
@@ -28,6 +30,28 @@ func _process(_delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if get_viewport().gui_get_hovered_control() != null:
 		return
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_Q:
+			attack_move_mode = true
+			_notify("Режим атаки-движения: кликните ПКМ")
+			get_viewport().set_input_as_handled()
+			return
+		elif event.keycode == KEY_H:
+			_issue_hold()
+			get_viewport().set_input_as_handled()
+			return
+		elif event.keycode == KEY_R:
+			_issue_retreat()
+			get_viewport().set_input_as_handled()
+			return
+		elif event.keycode >= KEY_1 and event.keycode <= KEY_9:
+			var group_id: int = event.keycode - KEY_1 + 1
+			if event.ctrl_pressed:
+				_assign_control_group(group_id)
+			else:
+				_select_control_group(group_id)
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			is_selecting = true
@@ -39,7 +63,11 @@ func _input(event: InputEvent) -> void:
 			_select_units_in_box()
 			queue_redraw()
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			_issue_move_command(get_global_mouse_position())
+			if attack_move_mode:
+				_issue_attack_move(get_global_mouse_position())
+				attack_move_mode = false
+			else:
+				_issue_move_command(get_global_mouse_position())
 
 func _draw() -> void:
 	if is_selecting:
@@ -56,6 +84,48 @@ func _clear_selection() -> void:
 				visual.modulate = Color.WHITE
 	selected_units.clear()
 	selected_squads.clear()
+
+func _assign_control_group(group_id: int) -> void:
+	var members: Array = []
+	for unit in selected_units:
+		if is_instance_valid(unit):
+			members.append(unit)
+	for squad in selected_squads:
+		if is_instance_valid(squad):
+			members.append(squad)
+	control_groups[group_id] = members
+	var hud: Node = get_tree().get_first_node_in_group("game_hud")
+	if hud != null and hud.has_method("_show_notification"):
+		hud.call("_show_notification", "Группа " + str(group_id) + " сохранена")
+
+func _select_control_group(group_id: int) -> void:
+	if not control_groups.has(group_id):
+		return
+	_clear_selection()
+	var members: Array = control_groups[group_id]
+	var valid_members: Array = []
+	for member in members:
+		if not is_instance_valid(member):
+			continue
+		valid_members.append(member)
+		if member is SquadController:
+			if member not in selected_squads:
+				selected_squads.append(member)
+			for soldier in member.soldiers:
+				if is_instance_valid(soldier):
+					selected_units.append(soldier)
+					_highlight_unit(soldier)
+		elif member is Node2D:
+			selected_units.append(member)
+			_highlight_unit(member)
+	control_groups[group_id] = valid_members
+	selection_changed.emit(selected_units, selected_squads)
+
+func _highlight_unit(unit: Node2D) -> void:
+	unit.modulate = Color.WHITE
+	var visual: CanvasItem = unit.get_node_or_null("ColorRect") as CanvasItem
+	if visual != null:
+		visual.modulate = highlight_color
 
 func _select_units_in_box() -> void:
 	var rect: Rect2 = Rect2(selection_start.min(selection_end), (selection_start - selection_end).abs())
@@ -107,3 +177,67 @@ func _issue_move_command(target: Vector2) -> void:
 	for unit in selected_units:
 		if is_instance_valid(unit) and (unit.is_in_group("player_vehicles") or unit.is_in_group("player_drones")) and unit.has_method("set_destination"):
 			unit.set_destination(target)
+
+func _issue_hold() -> void:
+	for squad in selected_squads:
+		if is_instance_valid(squad) and squad.has_method("hold"):
+			squad.hold()
+	for unit in selected_units:
+		if is_instance_valid(unit) and not (unit is Soldier) and unit.has_method("hold"):
+			unit.hold()
+	_notify("Удержать позицию")
+
+func _issue_retreat() -> void:
+	var retreat_target: Vector2 = _nearest_friendly_rally_point()
+	for squad in selected_squads:
+		if is_instance_valid(squad) and squad.has_method("move_squad"):
+			squad.move_squad(retreat_target)
+	for unit in selected_units:
+		if is_instance_valid(unit) and not (unit is Soldier) and unit.has_method("set_destination"):
+			unit.set_destination(retreat_target)
+	_notify("Отступление")
+
+func _issue_attack_move(target: Vector2) -> void:
+	for squad in selected_squads:
+		if is_instance_valid(squad):
+			if squad.has_method("set_attack_move"):
+				squad.set_attack_move(true)
+			if squad.has_method("move_squad"):
+				squad.move_squad(target)
+	for unit in selected_units:
+		if is_instance_valid(unit) and not (unit is Soldier):
+			if unit.has_method("set_attack_move"):
+				unit.set_attack_move(true)
+			if unit.has_method("set_destination"):
+				unit.set_destination(target)
+	_notify("Атака-движение")
+
+func _nearest_friendly_rally_point() -> Vector2:
+	var fallback: Vector2 = Vector2(200.0, 400.0)
+	var origin: Vector2 = fallback
+	if not selected_units.is_empty() and is_instance_valid(selected_units[0]):
+		origin = selected_units[0].global_position
+	var best: Vector2 = fallback
+	var best_dist: float = INF
+	for cp in get_tree().get_nodes_in_group("control_points"):
+		if not is_instance_valid(cp):
+			continue
+		if int(cp.get("point_owner")) != 1:
+			continue
+		var cp_pos: Vector2 = cp.global_position
+		var dist: float = origin.distance_to(cp_pos)
+		if dist < best_dist:
+			best_dist = dist
+			best = cp_pos
+	return best
+
+func _notify(text: String) -> void:
+	var hud: Node = get_tree().get_first_node_in_group("game_hud")
+	if hud != null and hud.has_method("_show_notification"):
+		hud.call("_show_notification", text)
+
+func issue_hold() -> void:
+	_issue_hold()
+
+func issue_retreat() -> void:
+	_issue_retreat()

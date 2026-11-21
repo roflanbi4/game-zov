@@ -14,6 +14,8 @@ var flashlight_on: bool = true
 var has_nvg: bool = false
 var _last_facing: Vector2 = Vector2.RIGHT
 var target_position: Vector2 = Vector2.ZERO
+var attack_move: bool = false
+var hold_mode: bool = false
 var squad_controller: Node2D = null
 
 
@@ -74,7 +76,28 @@ func _ready() -> void:
 func set_destination(destination: Vector2) -> void:
 	target_position = destination
 	nav_agent.set_target_position(destination)
+	hold_mode = false
+	attack_move = false
 	set_physics_process(true)
+
+func hold() -> void:
+	hold_mode = true
+	attack_move = false
+	target_position = global_position
+	if nav_agent != null:
+		nav_agent.set_target_position(global_position)
+	velocity = Vector2.ZERO
+
+func stop() -> void:
+	hold_mode = false
+	attack_move = false
+	target_position = global_position
+	if nav_agent != null:
+		nav_agent.set_target_position(global_position)
+	velocity = Vector2.ZERO
+
+func set_attack_move(enabled: bool) -> void:
+	attack_move = enabled
 
 func _physics_process(_delta: float) -> void:
 	if nav_agent.is_navigation_finished():
@@ -83,6 +106,11 @@ func _physics_process(_delta: float) -> void:
 		set_physics_process(false)
 		return
 	
+	if attack_move and weapon != null and is_instance_valid(weapon) and weapon.current_target != null and is_instance_valid(weapon.current_target):
+		if global_position.distance_to(weapon.current_target.global_position) <= weapon.attack_range:
+			velocity = Vector2.ZERO
+			move_and_slide()
+			return
 	var next_pos: Vector2 = nav_agent.get_next_path_position()
 	if next_pos == Vector2.ZERO:
 		velocity = Vector2.ZERO

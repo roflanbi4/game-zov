@@ -49,6 +49,21 @@ func move_squad(destination: Vector2) -> void:
 		var squad_dest: Vector2 = destination + offset
 		soldiers[i].set_destination(squad_dest)
 
+func hold() -> void:
+	for i in range(soldiers.size()):
+		if is_instance_valid(soldiers[i]) and soldiers[i].has_method("hold"):
+			soldiers[i].hold()
+
+func stop() -> void:
+	for i in range(soldiers.size()):
+		if is_instance_valid(soldiers[i]) and soldiers[i].has_method("stop"):
+			soldiers[i].stop()
+
+func set_attack_move(enabled: bool) -> void:
+	for i in range(soldiers.size()):
+		if is_instance_valid(soldiers[i]) and soldiers[i].has_method("set_attack_move"):
+			soldiers[i].set_attack_move(enabled)
+
 func on_soldier_died(soldier: Node2D) -> void:
 	if is_instance_valid(soldier):
 		soldiers.erase(soldier)

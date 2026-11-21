@@ -13,6 +13,8 @@ enum DroneType { RECON = 0, FPV_KAMIKAZE = 1 }
 
 var current_hp: int
 var target_position: Vector2 = Vector2.ZERO
+var attack_move: bool = false
+var hold_mode: bool = false
 var disabled: bool = false
 var _exploded: bool = false
 
@@ -45,7 +47,24 @@ func _ready() -> void:
 
 func set_destination(destination: Vector2) -> void:
 	target_position = destination
+	hold_mode = false
+	attack_move = false
 	set_physics_process(true)
+
+func hold() -> void:
+	hold_mode = true
+	attack_move = false
+	target_position = global_position
+	velocity = Vector2.ZERO
+
+func stop() -> void:
+	hold_mode = false
+	attack_move = false
+	target_position = global_position
+	velocity = Vector2.ZERO
+
+func set_attack_move(enabled: bool) -> void:
+	attack_move = enabled
 
 func _physics_process(_delta: float) -> void:
 	if disabled:
