@@ -29,6 +29,9 @@ func _on_health_died(_soldier: Node2D) -> void:
 
 func _explode() -> void:
 	exploded = true
+	var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
+	if cam != null and cam.has_method("shake"):
+		cam.call("shake", 10.0, 0.3)
 	var explosion_area: Area2D = get_node_or_null("ExplosionArea")
 	if explosion_area:
 		var bodies: Array = explosion_area.get_overlapping_bodies()

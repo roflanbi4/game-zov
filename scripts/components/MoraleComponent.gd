@@ -180,7 +180,28 @@ func _update_panic_retreat(delta: float) -> void:
 		if _panic_retreat_timer >= 1.5:
 			_panic_retreat_timer = 0.0
 			if current_morale < 45.0:
-				soldier.set_destination(soldier.global_position.move_toward(Vector2(200.0, 400.0), retreat_speed))
+				var retreat_pos: Vector2 = soldier.global_position
+				var nearest: Node2D = null
+				var nearest_dist: float = 1e6
+				var enemy_groups: Array[String] = []
+				if soldier.is_in_group("player_units"):
+					enemy_groups = ["enemy_units", "enemy_vehicles", "mutants"]
+				else:
+					enemy_groups = ["player_units", "player_vehicles"]
+				for g in enemy_groups:
+					for node in get_tree().get_nodes_in_group(g):
+						if not is_instance_valid(node) or not (node is Node2D):
+							continue
+						var dist: float = soldier.global_position.distance_to((node as Node2D).global_position)
+						if dist < nearest_dist:
+							nearest_dist = dist
+							nearest = node as Node2D
+				if nearest != null:
+					var dir: Vector2 = (soldier.global_position - nearest.global_position).normalized()
+					retreat_pos = soldier.global_position + dir * 120.0
+				retreat_pos.x = clampf(retreat_pos.x, 60.0, 1860.0)
+				retreat_pos.y = clampf(retreat_pos.y, 60.0, 1020.0)
+				soldier.set_destination(retreat_pos)
 
 func _update_cover_indicator() -> void:
 	if soldier == null or not is_instance_valid(soldier):

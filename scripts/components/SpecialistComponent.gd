@@ -180,6 +180,9 @@ func _on_mine_body_entered(body: Node2D, mine: Area2D) -> void:
 	if "enemy_units" not in groups and "enemy_vehicles" not in groups:
 		return
 	var mine_pos: Vector2 = mine.global_position
+	var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
+	if cam != null and cam.has_method("shake"):
+		cam.call("shake", 10.0, 0.3)
 	var damage: int = 120
 	var radius: float = 70.0
 

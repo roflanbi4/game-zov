@@ -27,14 +27,25 @@ func _process(delta: float) -> void:
 func _hit_target() -> void:
 	var targets: Array = get_tree().get_nodes_in_group(target_group)
 	targets.append_array(get_tree().get_nodes_in_group("explosives"))
+	var final_damage: float = float(damage)
 	for obj in targets:
 		if is_instance_valid(obj) and global_position.distance_to(obj.global_position) < 24.0:
+			if obj is Soldier:
+				var facing_variant: Variant = obj.get("_last_facing")
+				if facing_variant is Vector2:
+					var facing: Vector2 = facing_variant as Vector2
+					var to_attacker: Vector2 = (global_position - obj.global_position).normalized()
+					var dot: float = facing.dot(to_attacker)
+					if dot < -0.5:
+						final_damage *= 1.5
+					elif dot < 0.2:
+						final_damage *= 1.25
 			var health: HealthComponent = obj.get_node_or_null("HealthComponent")
 			if health:
 				if obj.has_method("take_damage"):
-					obj.take_damage(damage)
+					obj.take_damage(int(final_damage))
 				else:
-					health.take_damage(damage)
+					health.take_damage(int(final_damage))
 			if morale_penalty > 0:
 				var morale: MoraleComponent = obj.get_node_or_null("MoraleComponent") as MoraleComponent
 				if morale != null:

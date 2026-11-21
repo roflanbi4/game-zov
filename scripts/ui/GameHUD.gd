@@ -76,6 +76,24 @@ func _ready() -> void:
 	_day_night_btn.size = Vector2(200, 30)
 	_day_night_btn.pressed.connect(_on_day_night_toggled)
 	vbox.add_child(_day_night_btn)
+
+	var speed_hbox := HBoxContainer.new()
+	var pause_btn := Button.new()
+	pause_btn.text = "||"
+	pause_btn.size = Vector2(40, 24)
+	pause_btn.pressed.connect(func() -> void: Engine.time_scale = 0.0)
+	speed_hbox.add_child(pause_btn)
+	var btn_1x := Button.new()
+	btn_1x.text = "1x"
+	btn_1x.size = Vector2(40, 24)
+	btn_1x.pressed.connect(func() -> void: Engine.time_scale = 1.0)
+	speed_hbox.add_child(btn_1x)
+	var btn_2x := Button.new()
+	btn_2x.text = "2x"
+	btn_2x.size = Vector2(40, 24)
+	btn_2x.pressed.connect(func() -> void: Engine.time_scale = 2.0)
+	speed_hbox.add_child(btn_2x)
+	vbox.add_child(speed_hbox)
 	
 	# Нижние кнопки закупки — прижаты к нижнему краю окна через якоря
 	var grid := GridContainer.new()
@@ -783,6 +801,24 @@ func _on_flashlight_toggle() -> void:
 func _input(event: InputEvent) -> void:
 	if get_viewport().gui_get_hovered_control() != null:
 		return
+	if event is InputEventKey and event.keycode == KEY_SPACE and event.pressed:
+		var selected: Node2D = _get_selected_squad()
+		if selected != null and selected is Node2D:
+			var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
+			if cam != null:
+				var soldiers: Array = selected.get("soldiers")
+				if soldiers != null and not soldiers.is_empty():
+					var center: Vector2 = Vector2.ZERO
+					var count: int = 0
+					for s in soldiers:
+						if is_instance_valid(s) and s is Node2D:
+							center += (s as Node2D).global_position
+							count += 1
+					if count > 0:
+						center /= float(count)
+						cam.position = center
+		get_viewport().set_input_as_handled()
+		return
 	# Cancel any active mode on Esc or RMB
 	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed:
 		if _build_anchor_set:
@@ -925,6 +961,9 @@ func _on_cancel_mode_pressed() -> void:
 	_build_anchor_set = false
 
 func _aoe_damage(center: Vector2, radius: float, damage: int) -> void:
+	var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
+	if cam != null and cam.has_method("shake"):
+		cam.call("shake", 10.0, 0.3)
 	# Вспышка взрыва
 	var flash: ColorRect = ColorRect.new()
 	flash.size = Vector2(radius * 2.0, radius * 2.0)
@@ -1024,3 +1063,6 @@ func _on_debug_spawn_mutants() -> void:
 		spawner.name = "MutantWaveSpawner_Debug"
 		get_parent().add_child(spawner)
 	spawner._spawn_wave()
+
+func _exit_tree() -> void:
+	Engine.time_scale = 1.0

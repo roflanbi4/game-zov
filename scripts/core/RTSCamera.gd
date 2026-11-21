@@ -1,3 +1,4 @@
+class_name RTSCamera
 extends Camera2D
 
 @export var pan_speed: float = 300.0
@@ -15,6 +16,7 @@ func _ready() -> void:
 	limit_top = 0
 	limit_right = 1920
 	limit_bottom = 1080
+	add_to_group("rts_camera")
 
 func _process(delta: float) -> void:
 	var input_dir: Vector2 = Vector2.ZERO
@@ -44,6 +46,11 @@ func _process(delta: float) -> void:
 	position += input_dir.normalized() * pan_speed * delta
 	# Зажимаем в пределах карты
 	position = position.clamp(Vector2.ZERO, Vector2(1920.0, 1080.0))
+
+func shake(intensity: float = 8.0, duration: float = 0.25) -> void:
+	var tween := create_tween()
+	tween.tween_property(self, "offset", Vector2(randf_range(-intensity, intensity), randf_range(-intensity, intensity)), duration * 0.33)
+	tween.tween_property(self, "offset", Vector2.ZERO, duration * 0.33)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:

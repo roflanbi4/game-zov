@@ -13,11 +13,13 @@ func _ready() -> void:
 	if not is_in_group("enemy_squads"):
 		add_to_group("player_squads")
 	
-	# Создаём NavigationPolygon для навигации
-	var np = NavigationPolygon.new()
-	np.vertices = PackedVector2Array([Vector2(0, 0), Vector2(1920, 0), Vector2(1920, 1080), Vector2(0, 1080)])
-	np.polygons = [PackedInt32Array([0, 1, 2, 3])]
-	get_node("/root/Main/NavRegion").navigation_polygon = np
+	# Создаём NavigationPolygon для навигации, только если сетка ещё не задана
+	var nav_region: NavigationRegion2D = get_node("/root/Main/NavRegion") as NavigationRegion2D
+	if nav_region.navigation_polygon == null:
+		var np = NavigationPolygon.new()
+		np.vertices = PackedVector2Array([Vector2(0, 0), Vector2(1920, 0), Vector2(1920, 1080), Vector2(0, 1080)])
+		np.polygons = [PackedInt32Array([0, 1, 2, 3])]
+		nav_region.navigation_polygon = np
 	
 	formation_offsets = [
 		Vector2(-formation_spacing, 0),
