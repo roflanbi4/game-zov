@@ -56,6 +56,7 @@ func _ready() -> void:
 var _income_timer: float = 0.0
 
 func _process(delta: float) -> void:
+	_update_capture_state()
 	if is_capturing:
 		capture_timer = minf(capture_time, capture_timer + delta)
 		# Обновляем прогресс-бар
@@ -78,26 +79,29 @@ func _process(delta: float) -> void:
 			if eco != null:
 				eco.add_sp(int(capture_point_income))
 
-func _on_body_entered(body: Node2D) -> void:
-	if body.is_in_group("player_units"):
-		player_units_inside += 1
-	elif body.is_in_group("enemy_units"):
-		enemy_units_inside += 1
+func _on_body_entered(_body: Node2D) -> void:
 	_update_capture_state()
 
-func _on_body_exited(body: Node2D) -> void:
-	if body.is_in_group("player_units"):
-		player_units_inside = max(0, player_units_inside - 1)
-	elif body.is_in_group("enemy_units"):
-		enemy_units_inside = max(0, enemy_units_inside - 1)
+func _on_body_exited(_body: Node2D) -> void:
 	_update_capture_state()
 
 func _update_capture_state() -> void:
+	player_units_inside = 0
+	enemy_units_inside = 0
+	for body in get_overlapping_bodies():
+		if not is_instance_valid(body):
+			continue
+		if not (body is Node2D):
+			continue
+		if body.is_in_group("player_units"):
+			player_units_inside += 1
+		elif body.is_in_group("enemy_units"):
+			enemy_units_inside += 1
 	var total: int = player_units_inside + enemy_units_inside
 	if total == 0:
 		is_capturing = false
 		capture_timer = 0.0
-		_update_indicator()  # цвет владельца, не серый
+		_update_indicator()
 		_progress_bar.size = Vector2(0.0, 4.0)
 		return
 

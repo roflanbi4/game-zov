@@ -143,6 +143,18 @@ func _find_target() -> void:
 func _shoot() -> void:
 	if current_target == null:
 		return
+	var spawn_pos: Vector2 = muzzle.global_position if muzzle != null else global_position
+	var flash := ColorRect.new()
+	flash.size = Vector2(8.0, 8.0)
+	flash.position = spawn_pos - Vector2(4.0, 4.0)
+	flash.color = Color(1.0, 0.85, 0.25, 0.95)
+	flash.z_index = 10
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if get_tree() != null and get_tree().current_scene != null:
+		get_tree().current_scene.add_child(flash)
+	var flash_tween := create_tween()
+	flash_tween.tween_property(flash, "modulate:a", 0.0, 0.06)
+	flash_tween.tween_callback(flash.queue_free)
 	var bullet := Node2D.new()
 	var script_res := preload("res://scripts/core/Projectile.gd")
 	bullet.set_script(script_res)

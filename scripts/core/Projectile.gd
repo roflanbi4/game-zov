@@ -41,11 +41,13 @@ func _hit_target() -> void:
 					elif dot < 0.2:
 						final_damage *= 1.25
 			var health: HealthComponent = obj.get_node_or_null("HealthComponent")
-			if health:
+			if health != null:
 				if obj.has_method("take_damage"):
 					obj.take_damage(int(final_damage))
 				else:
 					health.take_damage(int(final_damage))
+			elif obj.has_method("take_damage"):
+				obj.take_damage(int(final_damage))
 			if morale_penalty > 0:
 				var morale: MoraleComponent = obj.get_node_or_null("MoraleComponent") as MoraleComponent
 				if morale != null:

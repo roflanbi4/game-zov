@@ -8,10 +8,10 @@ func _ready() -> void:
 
 func _on_body_entered(body: Node2D) -> void:
 	var health: HealthComponent = body.get_node_or_null("HealthComponent")
-	if health:
-		health.in_cover = true
+	if health != null:
+		health.cover_count = maxi(0, health.cover_count + 1)
 
 func _on_body_exited(body: Node2D) -> void:
 	var health: HealthComponent = body.get_node_or_null("HealthComponent")
-	if health:
-		health.in_cover = false
+	if health != null:
+		health.cover_count = maxi(0, health.cover_count - 1)

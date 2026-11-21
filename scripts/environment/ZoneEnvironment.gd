@@ -42,19 +42,35 @@ func generate_map(seed_val: int = 0) -> void:
 	road.body_entered.connect(func(body: Node) -> void:
 		if body.get("move_speed") == null:
 			return
-		if not body.has_meta("pre_terrain_speed"):
-			body.set_meta("pre_terrain_speed", body.get("move_speed"))
+		if not body.has_meta("terrain_base_move_speed"):
+			body.set_meta("terrain_base_move_speed", body.get("move_speed"))
+		if not body.has_meta("road_mult"):
+			body.set_meta("road_mult", 1.0)
+		if not body.has_meta("swamp_mult"):
+			body.set_meta("swamp_mult", 1.0)
+		var road_mult: float = 1.0
 		if body.is_in_group("player_vehicles") or body.is_in_group("enemy_vehicles"):
-			body.set("move_speed", float(body.get_meta("pre_terrain_speed")) * 1.3)
+			road_mult = 1.3
 		elif body.is_in_group("player_units") or body.is_in_group("enemy_units"):
-			body.set("move_speed", float(body.get_meta("pre_terrain_speed")) * 1.15)
+			road_mult = 1.15
+		body.set_meta("road_mult", road_mult)
+		var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
+		var current_road_mult: float = float(body.get_meta("road_mult"))
+		var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
+		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
 	)
 
-	# body_exited: восстановить скорость
+	# body_exited: пересчитать скорость без дороги
 	road.body_exited.connect(func(body: Node) -> void:
-		if body.has_meta("pre_terrain_speed"):
-			body.set("move_speed", float(body.get_meta("pre_terrain_speed")))
-			body.remove_meta("pre_terrain_speed")
+		if not body.has_meta("terrain_base_move_speed"):
+			return
+		body.set_meta("road_mult", 1.0)
+		var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
+		var current_road_mult: float = float(body.get_meta("road_mult"))
+		var current_swamp_mult: float = 1.0
+		if body.has_meta("swamp_mult"):
+			current_swamp_mult = float(body.get_meta("swamp_mult"))
+		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
 	)
 	if seed_val != 0:
 		rng.seed = seed_val
@@ -85,15 +101,29 @@ func generate_map(seed_val: int = 0) -> void:
 		swamp.body_entered.connect(func(body: Node) -> void:
 			if body.get("move_speed") == null:
 				return
-			if not body.has_meta("pre_terrain_speed"):
-				body.set_meta("pre_terrain_speed", body.get("move_speed"))
-			body.set("move_speed", float(body.get_meta("pre_terrain_speed")) * 0.6)
+			if not body.has_meta("terrain_base_move_speed"):
+				body.set_meta("terrain_base_move_speed", body.get("move_speed"))
+			if not body.has_meta("road_mult"):
+				body.set_meta("road_mult", 1.0)
+			if not body.has_meta("swamp_mult"):
+				body.set_meta("swamp_mult", 1.0)
+			body.set_meta("swamp_mult", 0.6)
+			var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
+			var current_road_mult: float = float(body.get_meta("road_mult"))
+			var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
+			body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
 		)
 
 		swamp.body_exited.connect(func(body: Node) -> void:
-			if body.has_meta("pre_terrain_speed"):
-				body.set("move_speed", float(body.get_meta("pre_terrain_speed")))
-				body.remove_meta("pre_terrain_speed")
+			if not body.has_meta("terrain_base_move_speed"):
+				return
+			body.set_meta("swamp_mult", 1.0)
+			var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
+			var current_road_mult: float = 1.0
+			if body.has_meta("road_mult"):
+				current_road_mult = float(body.get_meta("road_mult"))
+			var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
+			body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
 		)
 	# --- РАДИОАКТИВНЫЕ ЛУЖИ (2–3 пятна) ---
 	var rad_count: int = rng.randi_range(2, 3)

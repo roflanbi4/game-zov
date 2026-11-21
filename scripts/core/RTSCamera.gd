@@ -19,6 +19,7 @@ func _ready() -> void:
 	add_to_group("rts_camera")
 
 func _process(delta: float) -> void:
+	screen_size = get_viewport_rect().size
 	var input_dir: Vector2 = Vector2.ZERO
 	
 	# WASD + стрелочки (прямая проверка клавиш, без InputMap)

@@ -58,8 +58,21 @@ func on_soldier_died(soldier: Node2D) -> void:
 				if m != null:
 					m.reduce_morale(20.0)
 	if is_instance_valid(soldier):
+		var stain_pos: Vector2 = soldier.global_position
 		if soldier.is_in_group("enemy_units") and randf() < 0.35:
-			call_deferred("_spawn_loot", soldier.global_position)
+			call_deferred("_spawn_loot", stain_pos)
+		var stain := ColorRect.new()
+		stain.size = Vector2(14.0, 14.0)
+		stain.position = stain_pos - Vector2(7.0, 7.0)
+		stain.color = Color(0.35, 0.05, 0.05, 0.65)
+		stain.z_index = 1
+		stain.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stain.add_to_group("mission_cleanup")
+		if get_tree() != null and get_tree().current_scene != null:
+			get_tree().current_scene.add_child(stain)
+		var stain_tween := stain.create_tween()
+		stain_tween.tween_property(stain, "modulate:a", 0.0, 8.0)
+		stain_tween.tween_callback(stain.queue_free)
 		soldier.queue_free()
 	if soldiers.is_empty():
 		queue_free()
