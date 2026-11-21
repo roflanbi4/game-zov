@@ -2,7 +2,10 @@ class_name SquadController
 extends Node2D
 
 @export var formation_spacing: float = 24.0
+@export var formation: int = 0
 @export var specialist_type: int = 0
+
+enum Formation { LINE = 0, COLUMN = 1, WEDGE = 2, SPREAD = 3 }
 
 var soldiers: Array = []
 var formation_offsets: Array[Vector2] = []
@@ -21,11 +24,8 @@ func _ready() -> void:
 		np.polygons = [PackedInt32Array([0, 1, 2, 3])]
 		nav_region.navigation_polygon = np
 	
-	formation_offsets = [
-		Vector2(-formation_spacing, 0),
-		Vector2(formation_spacing, 0),
-		Vector2(0, -formation_spacing)
-	]
+	formation_offsets = []
+	_update_formation_offsets()
 	
 	soldiers = []
 	for child in get_children():
@@ -44,10 +44,65 @@ func _ready() -> void:
 
 
 func move_squad(destination: Vector2) -> void:
+	var squad_center: Vector2 = Vector2.ZERO
+	var valid_count: int = 0
 	for i in range(soldiers.size()):
-		var offset: Vector2 = formation_offsets[i % formation_offsets.size()]
+		if is_instance_valid(soldiers[i]):
+			squad_center += soldiers[i].global_position
+			valid_count += 1
+	if valid_count > 0:
+		squad_center /= float(valid_count)
+	var dir: Vector2 = (destination - squad_center)
+	var rotate_angle: float = 0.0
+	if dir.length() > 1.0:
+		rotate_angle = dir.angle()
+	for i in range(soldiers.size()):
+		if not is_instance_valid(soldiers[i]):
+			continue
+		var offset: Vector2 = formation_offsets[i % formation_offsets.size()].rotated(rotate_angle)
 		var squad_dest: Vector2 = destination + offset
 		soldiers[i].set_destination(squad_dest)
+
+func _update_formation_offsets() -> void:
+	formation_offsets = []
+	match formation:
+		Formation.LINE:
+			formation_offsets = [
+				Vector2(0.0, -formation_spacing),
+				Vector2.ZERO,
+				Vector2(0.0, formation_spacing)
+			]
+		Formation.COLUMN:
+			formation_offsets = [
+				Vector2(-formation_spacing, 0.0),
+				Vector2.ZERO,
+				Vector2(formation_spacing, 0.0)
+			]
+		Formation.WEDGE:
+			formation_offsets = [
+				Vector2(-formation_spacing, -formation_spacing),
+				Vector2.ZERO,
+				Vector2(formation_spacing, -formation_spacing)
+			]
+		Formation.SPREAD:
+			formation_offsets = [
+				Vector2(-formation_spacing * 1.5, -formation_spacing),
+				Vector2.ZERO,
+				Vector2(formation_spacing * 1.5, -formation_spacing)
+			]
+		_:
+			formation_offsets = [
+				Vector2(0.0, -formation_spacing),
+				Vector2.ZERO,
+				Vector2(0.0, formation_spacing)
+			]
+
+func set_formation(new_formation: int) -> void:
+	formation = new_formation
+	_update_formation_offsets()
+	for i in range(soldiers.size()):
+		if i < formation_offsets.size() and is_instance_valid(soldiers[i]):
+			soldiers[i].formation_offset = formation_offsets[i]
 
 func hold() -> void:
 	for i in range(soldiers.size()):

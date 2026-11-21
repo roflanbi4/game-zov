@@ -59,6 +59,11 @@ func take_damage(amount: int) -> void:
 		var morale: MoraleComponent = get_parent().get_node_or_null("MoraleComponent") as MoraleComponent
 		if morale != null:
 			morale.reduce_morale(float(amount))
+	# Шок от крупного урона: дополнительный урон морали
+	if actual_damage >= 25 and get_parent() != null:
+		var morale_shock: MoraleComponent = get_parent().get_node_or_null("MoraleComponent") as MoraleComponent
+		if morale_shock != null:
+			morale_shock.reduce_morale(10.0)
 	if current_hp <= 0:
 		current_hp = 0
 		died.emit(get_parent() as Node2D)

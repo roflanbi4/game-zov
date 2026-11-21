@@ -12,6 +12,7 @@ var detection_area: Area2D
 var muzzle: Node2D
 var cooldown_timer: float = 0.0
 var current_target: Node2D = null
+var _last_flanked_target: Node2D = null
 var _burst_count: int = 0
 var _burst_timer: float = 0.0
 
@@ -60,6 +61,22 @@ func _process(delta: float) -> void:
 			if global_position.distance_to(current_target.global_position) > allowed:
 				current_target = null
 				return
+		# Фланг-маркер: помечаем цель, если стреляем в спину
+		var prev_flanked: Node2D = _last_flanked_target
+		_last_flanked_target = null
+		if current_target is Soldier:
+			var target_soldier: Soldier = current_target as Soldier
+			var to_target: Vector2 = (current_target.global_position - global_position).normalized()
+			var dot: float = to_target.dot(target_soldier._last_facing)
+			if dot < -0.5:
+				target_soldier.set_flanked(true)
+				_last_flanked_target = current_target
+			else:
+				target_soldier.set_flanked(false)
+		if prev_flanked != null and prev_flanked != _last_flanked_target and is_instance_valid(prev_flanked):
+			var prev_soldier: Soldier = prev_flanked as Soldier
+			if prev_soldier != null:
+				prev_soldier.set_flanked(false)
 		var dist_to_target: float = global_position.distance_to(current_target.global_position)
 		if cooldown_timer <= 0.0:
 			if burst_enabled and _burst_count < 3 and dist_to_target > 120.0 and dist_to_target <= 260.0:

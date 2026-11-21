@@ -40,6 +40,15 @@ var _veteran_btn: Button = null
 var _nvg_btn: Button = null
 var _cancel_mode_btn: Button = null
 
+# Формации отряда
+var formation_names: Array = ["Линия", "Колонна", "Клин", "Развал"]
+var formation_tooltips: Array = [
+	"Стрелковая цепь лицом к цели",
+	"Гуськом вдоль дороги",
+	"Клином вперёд",
+	"Рассыпной порядок",
+]
+
 # Notification popup
 var _notification_label: Label = null
 var _notification_timer: float = 0.0
@@ -146,12 +155,6 @@ func _ready() -> void:
 	radio_btn.tooltip_text = "Радист: артудары, дым, увеличенная дальность"
 	radio_btn.pressed.connect(_on_radio)
 	grid.add_child(radio_btn)
-
-	var ew_btn := Button.new()
-	ew_btn.text = "Станция РЭБ (220 SP)"
-	ew_btn.tooltip_text = "РЭБ-станция: глушит вражеские дроны"
-	ew_btn.pressed.connect(_on_ew_station)
-	grid.add_child(ew_btn)
 
 	var flare_btn := Button.new()
 	flare_btn.text = "Осветительная ракета (30 SP)"
@@ -345,12 +348,30 @@ func _ready() -> void:
 	)
 	tac_hbox.add_child(retreat_btn)
 
+	# Третья строка: формации отряда
+	var form_hbox := HBoxContainer.new()
+	abil_vbox.add_child(form_hbox)
+
+	for i in range(4):
+		var btn := Button.new()
+		btn.text = formation_names[i]
+		btn.tooltip_text = formation_tooltips[i]
+		btn.pressed.connect(Callable(self, "_on_formation_selected").bind(i))
+		form_hbox.add_child(btn)
 
 	_aim_overlay = Node2D.new()
 	_aim_overlay.name = "AimOverlay"
 	_aim_overlay.z_index = 95
 	_aim_overlay.draw.connect(_on_aim_overlay_draw)
 	get_parent().add_child(_aim_overlay)
+func _on_formation_selected(formation_index: int) -> void:
+	var sm: Node = get_parent().get_node_or_null("SelectionManager")
+	if sm != null:
+		for squad in sm.selected_squads:
+			if is_instance_valid(squad) and squad.has_method("set_formation"):
+				squad.call("set_formation", formation_index)
+	_show_notification("Формация: " + formation_names[formation_index])
+
 func _on_sp_changed(new_amount: int) -> void:
 	_update_sp_label()
 

@@ -17,6 +17,8 @@ var target_position: Vector2 = Vector2.ZERO
 var attack_move: bool = false
 var hold_mode: bool = false
 var squad_controller: Node2D = null
+var is_flanked: bool = false
+var _flank_marker: ColorRect = null
 
 
 func _ready() -> void:
@@ -99,6 +101,20 @@ func stop() -> void:
 func set_attack_move(enabled: bool) -> void:
 	attack_move = enabled
 
+func set_flanked(flanked: bool) -> void:
+	is_flanked = flanked
+	if _flank_marker == null:
+		_flank_marker = ColorRect.new()
+		_flank_marker.name = "FlankMarker"
+		_flank_marker.size = Vector2(10.0, 10.0)
+		_flank_marker.position = Vector2(-5.0, -20.0)
+		_flank_marker.color = Color(1.0, 0.0, 0.0, 0.8)
+		_flank_marker.z_index = 50
+		_flank_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_flank_marker)
+	if _flank_marker != null:
+		_flank_marker.visible = flanked
+
 func _physics_process(_delta: float) -> void:
 	if nav_agent.is_navigation_finished():
 		velocity = Vector2.ZERO
@@ -146,3 +162,5 @@ func _process(_delta: float) -> void:
 	# Видимость конуса фонарика: только Rookie без ПНВ, только ночь, только_player_units, только flashlight_on
 	cone.visible = is_night and rank == VeterancyComponent.Rank.ROOKIE and not has_nvg and is_in_group("player_units") and flashlight_on
 	cone.rotation = _last_facing.angle()
+	if _flank_marker != null and _flank_marker.visible:
+		_flank_marker.position = Vector2(-5.0, -20.0)

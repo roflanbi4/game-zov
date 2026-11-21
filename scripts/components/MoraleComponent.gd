@@ -3,11 +3,13 @@ extends Node
 
 @export var max_morale: float = 100.0
 @export var panic_threshold: float = 30.0
+@export var suppression_threshold: float = 45.0
 @export var recovery_rate: float = 5.0
 @export var combat_timeout: float = 3.0
 
 var current_morale: float = 100.0
 var is_panicked: bool = false
+var is_suppressed: bool = false
 var cowardice_multiplier: float = 1.5
 
 var soldier: CharacterBody2D = null
@@ -55,6 +57,7 @@ func _process(delta: float) -> void:
 		var rate: float = recovery_rate + _medic_recovery_bonus
 		current_morale = minf(max_morale, current_morale + rate * delta)
 		_update_panic_state()
+		is_suppressed = current_morale < suppression_threshold and current_morale >= panic_threshold
 
 	_update_last_stand()
 	_update_panic_retreat(delta)
@@ -85,6 +88,8 @@ func _apply_panic_effects() -> void:
 	if soldier != null and is_instance_valid(soldier):
 		if _last_stand:
 			soldier.move_speed = _base_move_speed
+		elif is_suppressed:
+			soldier.move_speed = _base_move_speed * 0.7
 		elif is_panicked:
 			soldier.move_speed = _base_move_speed * 0.6
 		else:
@@ -92,6 +97,8 @@ func _apply_panic_effects() -> void:
 	if weapon_component != null and is_instance_valid(weapon_component):
 		if _last_stand:
 			weapon_component.attack_cooldown = _base_attack_cooldown * 0.65
+		elif is_suppressed:
+			weapon_component.attack_cooldown = _base_attack_cooldown * 1.4
 		elif is_panicked:
 			weapon_component.attack_cooldown = _base_attack_cooldown * 2.0
 		else:
