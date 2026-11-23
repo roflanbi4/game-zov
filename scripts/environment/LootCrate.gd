@@ -63,8 +63,9 @@ func _on_body_entered(body: Node2D) -> void:
 
 func _heal_squad(body: Node2D) -> void:
 	var squad: Node2D = body.get_parent() as Node2D
-	var raw_soldiers: Variant = squad.get("soldiers") if squad != null else null
-	var soldiers: Array = raw_soldiers if raw_soldiers is Array else []
+	var soldiers: Array = []
+	if squad is SquadController:
+		soldiers = (squad as SquadController).soldiers
 	if not soldiers.is_empty():
 		for s in soldiers:
 			if is_instance_valid(s):
@@ -81,8 +82,9 @@ func _heal_squad(body: Node2D) -> void:
 
 func _upgrade_weapon(body: Node2D) -> void:
 	var squad: Node2D = body.get_parent() as Node2D
-	var raw_soldiers: Variant = squad.get("soldiers") if squad != null else null
-	var soldiers: Array = raw_soldiers if raw_soldiers is Array else []
+	var soldiers: Array = []
+	if squad is SquadController:
+		soldiers = (squad as SquadController).soldiers
 	if not soldiers.is_empty():
 		for s in soldiers:
 			if is_instance_valid(s):

@@ -20,7 +20,6 @@ var _build_anchor_pos: Vector2 = Vector2.ZERO
 var _build_rotation: float = 0.0
 
 # Ability panel state
-var _selected_squad: Node2D = null
 var _mine_mode: bool = false
 var _artillery_mode: bool = false
 var _grenade_mode: bool = false
@@ -372,7 +371,7 @@ func _on_formation_selected(formation_index: int) -> void:
 				squad.call("set_formation", formation_index)
 	_show_notification("Формация: " + formation_names[formation_index])
 
-func _on_sp_changed(new_amount: int) -> void:
+func _on_sp_changed(_new_amount: int) -> void:
 	_update_sp_label()
 
 func _update_sp_label() -> void:
@@ -383,7 +382,9 @@ func _on_aim_overlay_draw() -> void:
 		var selected: Node2D = _get_selected_squad()
 		if selected == null:
 			return
-		var soldiers: Array = selected.get("soldiers")
+		var soldiers: Array = []
+		if selected is SquadController:
+			soldiers = (selected as SquadController).soldiers
 		if soldiers == null:
 			return
 		var center: Vector2 = Vector2.ZERO
@@ -422,7 +423,9 @@ func _on_aim_overlay_draw() -> void:
 	var selected: Node2D = _get_selected_squad()
 	if selected == null:
 		return
-	var soldiers: Array = selected.get("soldiers")
+	var soldiers: Array = []
+	if selected is SquadController:
+		soldiers = (selected as SquadController).soldiers
 	if soldiers == null:
 		return
 	var center: Vector2 = Vector2.ZERO
@@ -488,7 +491,9 @@ func _process(delta: float) -> void:
 	if _arty_btn != null:
 		_arty_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.RADIO)
 
-	var soldiers: Array = squad.get("soldiers")
+	var soldiers: Array = []
+	if squad is SquadController:
+		soldiers = (squad as SquadController).soldiers
 	if _flashlight_btn != null and squad != null:
 		if soldiers != null and soldiers.size() > 0 and is_instance_valid(soldiers[0]):
 			var on: bool = bool(soldiers[0].get("flashlight_on"))
@@ -881,7 +886,9 @@ func _input(event: InputEvent) -> void:
 		if selected != null and selected is Node2D:
 			var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
 			if cam != null:
-				var soldiers: Array = selected.get("soldiers")
+				var soldiers: Array = []
+				if selected is SquadController:
+					soldiers = (selected as SquadController).soldiers
 				if soldiers != null and not soldiers.is_empty():
 					var center: Vector2 = Vector2.ZERO
 					var count: int = 0
@@ -940,7 +947,9 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			var selected: Node2D = _get_selected_squad()
 			if selected != null:
-				var soldiers: Array = selected.get("soldiers")
+				var soldiers: Array = []
+				if selected is SquadController:
+					soldiers = (selected as SquadController).soldiers
 				var center: Vector2 = Vector2.ZERO
 				var count: int = 0
 				for s in soldiers:
@@ -967,7 +976,9 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			var selected: Node2D = _get_selected_squad()
 			if selected != null:
-				var soldiers: Array = selected.get("soldiers")
+				var soldiers: Array = []
+				if selected is SquadController:
+					soldiers = (selected as SquadController).soldiers
 				var center: Vector2 = Vector2.ZERO
 				var count: int = 0
 				for s in soldiers:
@@ -992,7 +1003,9 @@ func _input(event: InputEvent) -> void:
 				_build_anchor_set = false
 				return
 			if not _build_anchor_set:
-				var soldiers: Array = selected.get("soldiers")
+				var soldiers: Array = []
+				if selected is SquadController:
+					soldiers = (selected as SquadController).soldiers
 				var center: Vector2 = Vector2.ZERO
 				var count: int = 0
 				for s in soldiers:
