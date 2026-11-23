@@ -179,7 +179,7 @@ static func build_mission_2(parent: Node) -> Array[VehicleUnit]:
 static func build_mission_3(parent: Node) -> StaticBody2D:
 	var mm := _mm(parent)
 	if mm != null:
-		mm._set_objective("M3 [Syndicate]: Night raid — destroy Corps base")
+		mm._set_objective("M3 [Syndicate]: Night raid - destroy Corps base")
 	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
 	if hud != null:
 		hud.set_night(true)
@@ -199,7 +199,7 @@ static func build_mission_3(parent: Node) -> StaticBody2D:
 static func build_mission_4(parent: Node) -> void:
 	var mm := _mm(parent)
 	if mm != null:
-		mm._set_objective("M4 [Syndicate]: Heart of the Rift — hold the artifact point for 180 sec")
+		mm._set_objective("M4 [Syndicate]: Heart of the Rift - hold the artifact point for 180 sec")
 	var cp: ControlPoint = _make_control_point(parent, Vector2(960, 540))
 	cp.capture_time = 2.0
 	_make_artifact(parent, Vector2(960, 540), ArtifactPickup.BuffType.HP)
@@ -230,4 +230,3 @@ static func build_sandbox(parent: Node) -> void:
 	ai.think_interval = 15.0
 	ai.starting_resources = 150
 	parent.call_deferred("add_child", ai)
-

@@ -1,4 +1,4 @@
-class_name LootCrate
+﻿class_name LootCrate
 extends Area2D
 
 enum LootType { SP_CACHE = 0, MEDKIT = 1, TROPHY_RPG = 2 }
@@ -41,9 +41,9 @@ func _get_label_text() -> String:
 		LootType.SP_CACHE:
 			return "+45 SP"
 		LootType.MEDKIT:
-			return "Аптечка"
+			return "Medkit"
 		LootType.TROPHY_RPG:
-			return "РПГ"
+			return "RPG"
 	return ""
 
 func _on_body_entered(body: Node2D) -> void:
@@ -101,4 +101,4 @@ func _upgrade_weapon(body: Node2D) -> void:
 func _show_notification() -> void:
 	var hud: Node = get_tree().get_first_node_in_group("game_hud")
 	if hud != null and hud.has_method("_show_notification"):
-		hud.call("_show_notification", "Лут получен!")
+		hud.call("_show_notification", "Loot received!")
