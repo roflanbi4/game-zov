@@ -1,6 +1,8 @@
 class_name RTSCamera
 extends Camera2D
 
+const _CFG := preload("res://scripts/core/GameConfig.gd")
+
 @export var pan_speed: float = 300.0
 @export var zoom_speed: float = 0.1
 @export var min_zoom: float = 0.5
@@ -14,8 +16,8 @@ func _ready() -> void:
 	# Ограничиваем камеру в пределах карты 1920x1080
 	limit_left = 0
 	limit_top = 0
-	limit_right = 1920
-	limit_bottom = 1080
+	limit_right = int(_CFG.MAP_WIDTH)
+	limit_bottom = int(_CFG.MAP_HEIGHT)
 	add_to_group("rts_camera")
 
 func _process(delta: float) -> void:
@@ -46,7 +48,7 @@ func _process(delta: float) -> void:
 	# Перемещение камеры
 	position += input_dir.normalized() * pan_speed * delta
 	# Зажимаем в пределах карты
-	position = position.clamp(Vector2.ZERO, Vector2(1920.0, 1080.0))
+	position = position.clamp(Vector2.ZERO, Vector2(_CFG.MAP_WIDTH, _CFG.MAP_HEIGHT))
 
 func shake(intensity: float = 8.0, duration: float = 0.25) -> void:
 	var tween := create_tween()

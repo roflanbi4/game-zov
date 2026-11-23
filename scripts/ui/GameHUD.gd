@@ -1055,7 +1055,11 @@ func _aoe_damage(center: Vector2, radius: float, damage: int) -> void:
 	targets.append_array(get_tree().get_nodes_in_group("enemy_units"))
 	targets.append_array(get_tree().get_nodes_in_group("enemy_vehicles"))
 	targets.append_array(get_tree().get_nodes_in_group("enemy_drones"))
+	var hit_targets: Array[Node] = []
 	for obj in targets:
+		if obj not in hit_targets:
+			hit_targets.append(obj)
+	for obj in hit_targets:
 		if is_instance_valid(obj) and obj is Node2D:
 			if center.distance_to(obj.global_position) <= radius:
 				var health: HealthComponent = obj.get_node_or_null("HealthComponent") as HealthComponent

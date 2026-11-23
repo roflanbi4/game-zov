@@ -188,7 +188,11 @@ func _on_mine_body_entered(body: Node2D, mine: Area2D) -> void:
 
 	var enemies: Array = get_tree().get_nodes_in_group("enemy_units")
 	enemies.append_array(get_tree().get_nodes_in_group("enemy_vehicles"))
-	for enemy in enemies:
+	var hit_targets: Array[Node] = []
+	for obj in enemies:
+		if obj not in hit_targets:
+			hit_targets.append(obj)
+	for enemy in hit_targets:
 		if is_instance_valid(enemy) and enemy is Node2D:
 			if mine_pos.distance_to(enemy.global_position) <= radius:
 				var health: HealthComponent = enemy.get_node_or_null("HealthComponent") as HealthComponent

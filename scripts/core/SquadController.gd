@@ -1,6 +1,8 @@
 class_name SquadController
 extends Node2D
 
+const _CFG := preload("res://scripts/core/GameConfig.gd")
+
 @export var formation_spacing: float = 24.0
 @export var formation: int = 0
 @export var specialist_type: int = 0
@@ -20,7 +22,7 @@ func _ready() -> void:
 	var nav_region: NavigationRegion2D = get_node("/root/Main/NavRegion") as NavigationRegion2D
 	if nav_region.navigation_polygon == null:
 		var np = NavigationPolygon.new()
-		np.vertices = PackedVector2Array([Vector2(0, 0), Vector2(1920, 0), Vector2(1920, 1080), Vector2(0, 1080)])
+		np.vertices = PackedVector2Array([Vector2(0, 0), Vector2(_CFG.MAP_WIDTH, 0), Vector2(_CFG.MAP_WIDTH, _CFG.MAP_HEIGHT), Vector2(0, _CFG.MAP_HEIGHT)])
 		np.polygons = [PackedInt32Array([0, 1, 2, 3])]
 		nav_region.navigation_polygon = np
 	

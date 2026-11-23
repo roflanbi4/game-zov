@@ -1,5 +1,7 @@
 class_name ZoneEnvironment extends Node2D
 
+const _CFG := preload("res://scripts/core/GameConfig.gd")
+
 func _ready() -> void:
 	add_to_group("mission_cleanup")
 	z_index = 0
@@ -15,17 +17,17 @@ func generate_map(seed_val: int = 0) -> void:
 	road.name = "Road"
 	var road_coll: CollisionShape2D = CollisionShape2D.new()
 	road_coll.shape = RectangleShape2D.new()
-	(road_coll.shape as RectangleShape2D).size = Vector2(1920.0, 70.0)
+	(road_coll.shape as RectangleShape2D).size = Vector2(_CFG.MAP_WIDTH, 70.0)
 	road.add_child(road_coll)
 
 	var road_visual: ColorRect = ColorRect.new()
 	road_visual.color = Color(0.22, 0.23, 0.25, 0.85)
-	road_visual.size = Vector2(1920.0, 70.0)
+	road_visual.size = Vector2(_CFG.MAP_WIDTH, 70.0)
 	road_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	road.add_child(road_visual)
 
 	# Прерывистая жёлтая разметка по центру
-	for i in range(0, 1920, 60):
+	for i in range(0, int(_CFG.MAP_WIDTH), 60):
 		var dash: ColorRect = ColorRect.new()
 		dash.color = Color(0.95, 0.85, 0.05, 0.9)
 		dash.size = Vector2(30.0, 6.0)
