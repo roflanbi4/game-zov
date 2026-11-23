@@ -8,6 +8,7 @@ enum Owner { NONE = 0, PLAYER = 1, ENEMY = 2 }
 @export var capture_point_income: float = 5.0
 @export var spawn_position: Vector2 = Vector2(200, 400)
 
+
 var point_owner: int = Owner.NONE
 var capture_timer: float = 0.0
 var is_capturing: bool = false
