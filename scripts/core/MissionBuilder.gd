@@ -125,15 +125,18 @@ static func build_mission_1(parent: Node) -> void:
 	var mm := _mm(parent)
 	if mm != null:
 		mm._set_objective("M1 [Corps]: Capture 3 control points and repel 2 mutant waves")
+	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
+	if hud != null:
+		hud.call_deferred("set_night", false)
 	spawn_player_squad(parent, Vector2(200, 400), 3)
-	_make_control_point(parent, Vector2(500, 250))
-	_make_control_point(parent, Vector2(1000, 540))
-	_make_control_point(parent, Vector2(1400, 800))
+	_make_control_point(parent, Vector2(700, 350))
+	_make_control_point(parent, Vector2(1300, 720))
+	_make_control_point(parent, Vector2(1900, 1050))
 	var spawner := MutantWaveSpawner.new()
 	spawner.name = "MutantWaveSpawner"
 	spawner.max_waves = 2
 	spawner.wave_interval = 12.0
-	spawner.spawn_points = [Vector2(1700, 200), Vector2(1700, 800)]
+	spawner.spawn_points = [Vector2(2350, 300), Vector2(2350, 1100)]
 	spawner.swarm_count = 5
 	spawner.brute_count = 1
 	parent.call_deferred("add_child", spawner)
@@ -142,6 +145,9 @@ static func build_mission_2(parent: Node) -> Array[VehicleUnit]:
 	var mm := _mm(parent)
 	if mm != null:
 		mm._set_objective("M2 [Corps]: Escort 2 trucks to extraction zone on the right")
+	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
+	if hud != null:
+		hud.call_deferred("set_night", true)
 	var trucks: Array[VehicleUnit] = []
 	for i in range(2):
 		var truck: VehicleUnit = _make_vehicle(parent, Vector2(200 + i * 80, 540), false)
@@ -161,7 +167,7 @@ static func build_mission_2(parent: Node) -> Array[VehicleUnit]:
 	_make_barrel(parent, Vector2(1400, 550))
 	var extract := Area2D.new()
 	extract.name = "ExtractionZone"
-	extract.position = Vector2(1750, 540)
+	extract.position = Vector2(2350, 720)
 	var cs := CollisionShape2D.new()
 	var rs := RectangleShape2D.new()
 	rs.size = Vector2(100, 300)
@@ -182,11 +188,11 @@ static func build_mission_3(parent: Node) -> StaticBody2D:
 		mm._set_objective("M3 [Syndicate]: Night raid - destroy Corps base")
 	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
 	if hud != null:
-		hud.set_night(true)
+		hud.call_deferred("set_night", true)
 	_make_drone(parent, Vector2(200, 400), DroneUnit.DroneType.FPV_KAMIKAZE, false)
 	_make_drone(parent, Vector2(240, 400), DroneUnit.DroneType.FPV_KAMIKAZE, false)
 	spawn_player_squad(parent, Vector2(200, 350), 3)
-	var base: StaticBody2D = _make_base(parent, Vector2(1500, 540), 1500)
+	var base: StaticBody2D = _make_base(parent, Vector2(2100, 720), 1500)
 	spawn_enemy_squad(parent, Vector2(1350, 450), 3)
 	spawn_enemy_squad(parent, Vector2(1350, 650), 3)
 	var ai := SkirmishAI.new()
@@ -200,9 +206,12 @@ static func build_mission_4(parent: Node) -> void:
 	var mm := _mm(parent)
 	if mm != null:
 		mm._set_objective("M4 [Syndicate]: Heart of the Rift - hold the artifact point for 180 sec")
-	var cp: ControlPoint = _make_control_point(parent, Vector2(960, 540))
+	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
+	if hud != null:
+		hud.call_deferred("set_night", false)
+	var cp: ControlPoint = _make_control_point(parent, Vector2(1280, 720))
 	cp.capture_time = 2.0
-	_make_artifact(parent, Vector2(960, 540), ArtifactPickup.BuffType.HP)
+	_make_artifact(parent, Vector2(1280, 720), ArtifactPickup.BuffType.HP)
 	spawn_player_squad(parent, Vector2(200, 400), 3)
 	var spawner := MutantWaveSpawner.new()
 	spawner.name = "MutantWaveSpawner"
@@ -222,6 +231,9 @@ static func build_sandbox(parent: Node) -> void:
 	var mm := _mm(parent)
 	if mm != null:
 		mm._set_objective("Sandbox: build an army and capture points")
+	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
+	if hud != null:
+		hud.call_deferred("set_night", false)
 	spawn_player_squad(parent, Vector2(200, 400), 3)
 	_make_control_point(parent, Vector2(600, 300))
 	_make_control_point(parent, Vector2(1300, 700))

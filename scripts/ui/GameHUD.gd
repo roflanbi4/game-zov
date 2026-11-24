@@ -114,6 +114,10 @@ func _ready() -> void:
 	mutant_btn.pressed.connect(_on_debug_spawn_mutants)
 	debug_vbox.add_child(mutant_btn)
 
+	var mm: MissionManager = get_parent().get_node_or_null("MissionManager") as MissionManager
+	if mm != null and _day_night_btn != null:
+		_day_night_btn.visible = (mm.mission == MissionManager.Mission.SANDBOX)
+
 func _on_sp_changed(_new_amount: int) -> void:
 	_update_sp_label()
 

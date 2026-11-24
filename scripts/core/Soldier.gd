@@ -154,10 +154,12 @@ func _process(_delta: float) -> void:
 		rank = veterancy_component.rank
 
 	# Разворот к цели или по вектору движения
+	var desired_facing: Vector2 = _last_facing
 	if weapon != null and weapon.current_target != null and is_instance_valid(weapon.current_target):
-		_last_facing = (weapon.current_target.global_position - global_position).normalized()
+		desired_facing = (weapon.current_target.global_position - global_position).normalized()
 	elif velocity.length() > 1.0:
-		_last_facing = velocity.normalized()
+		desired_facing = velocity.normalized()
+	_last_facing = Vector2.from_angle(lerp_angle(_last_facing.angle(), desired_facing.angle(), clampf(_delta * 8.0, 0.0, 1.0)))
 
 	# Видимость конуса фонарика: только Rookie без ПНВ, только ночь, только_player_units, только flashlight_on
 	cone.visible = is_night and rank == VeterancyComponent.Rank.ROOKIE and not has_nvg and is_in_group("player_units") and flashlight_on

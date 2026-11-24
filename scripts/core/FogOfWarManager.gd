@@ -1,8 +1,8 @@
 class_name FogOfWarManager
 extends Node2D
 
-const SUB_W: int = 480
-const SUB_H: int = 270
+const SUB_W: int = 640
+const SUB_H: int = 360
 const SCALE: float = 4.0
 
 var is_night: bool = false
