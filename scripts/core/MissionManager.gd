@@ -14,8 +14,6 @@ var _finish_overlay: Node
 var _objective_text_override: String = ""
 
 var _mission_start_time: float = 0.0
-var _elapsed: float = 0.0
-var _hold_duration: float = 0.0
 var _finished: bool = false
 var _base: StaticBody2D
 var _convoy_trucks: Array[VehicleUnit] = []
@@ -89,7 +87,7 @@ func _close_menu() -> void:
 
 func _start_mission(m: int) -> void:
 	_close_menu()
-	mission = m
+	mission = m as Mission
 	await get_tree().process_frame
 	_clear_world()
 	await get_tree().process_frame

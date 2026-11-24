@@ -40,7 +40,7 @@ func _on_body_entered(body: Node) -> void:
 
 	for child in get_children():
 		if child is CollisionShape2D:
-			child.disabled = true
+			child.set_deferred("disabled", true)
 		if child is ColorRect:
 			child.visible = false
 

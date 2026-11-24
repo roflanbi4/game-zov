@@ -10,6 +10,19 @@ var exploded: bool = false
 
 func _ready() -> void:
 	add_to_group("explosives")
+	var cs := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 12.0
+	cs.shape = circle
+	add_child(cs)
+
+	var rect := ColorRect.new()
+	rect.size = Vector2(20.0, 20.0)
+	rect.position = Vector2(-10.0, -10.0)
+	rect.color = Color(0.85, 0.15, 0.1, 1.0)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(rect)
+
 	var health = HealthComponent.new()
 	health.name = "HealthComponent"
 	health.max_hp = hp
@@ -32,14 +45,18 @@ func _explode() -> void:
 	var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
 	if cam != null and cam.has_method("shake"):
 		cam.call("shake", 10.0, 0.3)
-	var explosion_area: Area2D = get_node_or_null("ExplosionArea")
-	if explosion_area:
-		var bodies: Array = explosion_area.get_overlapping_bodies()
-		for body in bodies:
-			if body is Node2D:
-				var health: HealthComponent = body.get_node_or_null("HealthComponent")
-				if health:
-					var dist: float = global_position.distance_to(body.global_position)
-					if dist <= explosion_radius:
-						health.take_damage(explosion_damage)
+	var targets: Array = []
+	for g in ["player_units", "enemy_units", "mutants"]:
+		targets.append_array(get_tree().get_nodes_in_group(g))
+	for body in targets:
+		if not is_instance_valid(body) or not (body is Node2D):
+			continue
+		var dist: float = global_position.distance_to((body as Node2D).global_position)
+		if dist > explosion_radius:
+			continue
+		var health: HealthComponent = (body as Node).get_node_or_null("HealthComponent") as HealthComponent
+		if health != null:
+			health.take_damage(explosion_damage)
+		elif body.has_method("take_damage"):
+			body.take_damage(explosion_damage)
 	queue_free()

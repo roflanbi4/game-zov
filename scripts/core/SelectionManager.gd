@@ -33,7 +33,7 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_Q:
 			attack_move_mode = true
-			_notify("Режим атаки-движения: кликните ПКМ")
+			_notify("Attack-move: click RMB")
 			get_viewport().set_input_as_handled()
 			return
 		elif event.keycode == KEY_H:
@@ -96,7 +96,7 @@ func _assign_control_group(group_id: int) -> void:
 	control_groups[group_id] = members
 	var hud: Node = get_tree().get_first_node_in_group("game_hud")
 	if hud != null and hud.has_method("_show_notification"):
-		hud.call("_show_notification", "Группа " + str(group_id) + " сохранена")
+		hud.call("_show_notification", "Group " + str(group_id) + " assigned")
 
 func _select_control_group(group_id: int) -> void:
 	if not control_groups.has(group_id):
@@ -185,7 +185,7 @@ func _issue_hold() -> void:
 	for unit in selected_units:
 		if is_instance_valid(unit) and not (unit is Soldier) and unit.has_method("hold"):
 			unit.hold()
-	_notify("Удержать позицию")
+	_notify("Hold position")
 
 func _issue_retreat() -> void:
 	var retreat_target: Vector2 = _nearest_friendly_rally_point()
@@ -195,7 +195,7 @@ func _issue_retreat() -> void:
 	for unit in selected_units:
 		if is_instance_valid(unit) and not (unit is Soldier) and unit.has_method("set_destination"):
 			unit.set_destination(retreat_target)
-	_notify("Отступление")
+	_notify("Retreat")
 
 func _issue_attack_move(target: Vector2) -> void:
 	for squad in selected_squads:
@@ -210,7 +210,7 @@ func _issue_attack_move(target: Vector2) -> void:
 				unit.set_attack_move(true)
 			if unit.has_method("set_destination"):
 				unit.set_destination(target)
-	_notify("Атака-движение")
+	_notify("Attack-move")
 
 func _nearest_friendly_rally_point() -> Vector2:
 	var fallback: Vector2 = Vector2(200.0, 400.0)

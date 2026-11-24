@@ -112,7 +112,6 @@ func _cowardice_for_rank() -> float:
 func _update_xp_bar_visual() -> void:
 	if xp_bar_fill == null:
 		return
-	var progress_xp: int = xp
 	if rank == Rank.ELITE:
 		xp_bar_fill.size = Vector2(24.0, 3.0)
 		xp_bar_fill.color = Color(1.0, 0.85, 0.2)  # золото

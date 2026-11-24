@@ -145,7 +145,7 @@ func generate_map(seed_val: int = 0) -> void:
 
 		# Подпись "РАД."
 		var label: Label = Label.new()
-		label.text = "РАД."
+		label.text = "RAD"
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		label.size = Vector2(80.0, 80.0)

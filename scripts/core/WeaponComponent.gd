@@ -183,7 +183,8 @@ func _shoot() -> void:
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bullet.add_child(rect)
 	bullet.global_position = muzzle.global_position
-	get_tree().root.add_child(bullet)
+	get_tree().current_scene.add_child(bullet)
+	bullet.add_to_group("mission_cleanup")
 	bullet.setup(current_target.global_position, projectile_speed, attack_damage, target_group)
 	if has_meta("morale_penalty"):
 		bullet.morale_penalty = int(get_meta("morale_penalty"))

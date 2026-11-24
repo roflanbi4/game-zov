@@ -66,7 +66,6 @@ func _make_mutant(kind: String, pos: Vector2) -> void:
 	var spd: float = 300.0
 	# Ближний бой: скорость атаки 28.0, пуль 2000.0
 	var dmg: int = 25
-	var rng: float = 140.0
 	var cd: float = 0.6
 	if kind == "brute":
 		rect.size = Vector2(30, 30)
@@ -75,7 +74,6 @@ func _make_mutant(kind: String, pos: Vector2) -> void:
 		hp = 260
 		spd = 90.0
 		dmg = 45
-		rng = 130.0
 		cd = 1.4
 	else:
 		rect.size = Vector2(14, 14)
@@ -90,7 +88,7 @@ func _make_mutant(kind: String, pos: Vector2) -> void:
 	var wc := WeaponComponent.new()
 	wc.name = "WeaponComponent"
 	# Ближний бой: урон мгновенно, без пуль
-	wc.attack_range = 28.0
+	wc.attack_range = 42.0 if kind == "brute" else 34.0
 	wc.attack_damage = dmg
 	wc.attack_cooldown = cd
 	wc.projectile_speed = 2000.0

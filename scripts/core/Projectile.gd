@@ -65,9 +65,9 @@ func _award_xp() -> void:
 		if soldiers != null:
 			for s in soldiers:
 				if is_instance_valid(s):
-					var vet: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
-					if vet != null:
-						vet.add_xp(15)
+					var s_vet: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+					if s_vet != null:
+						s_vet.add_xp(15)
 			return
 	var vet: VeterancyComponent = shooter.get_node_or_null("VeterancyComponent") as VeterancyComponent
 	if vet != null:

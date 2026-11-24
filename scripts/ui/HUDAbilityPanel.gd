@@ -48,8 +48,7 @@ var formation_tooltips: Array = [
 ]
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	_eco = get_tree().get_first_node_in_group("economy") as EconomyManager
 	name = "AbilityPanel"
 	position = Vector2(10, 100)
@@ -235,7 +234,7 @@ func _on_flashlight_toggle() -> void:
 			has_rookie_without_nvg = true
 			break
 	if not has_rookie_without_nvg:
-		_show_notification("Squad has NVG/thermal — flashlight not needed")
+		_show_notification("Squad has NVG/thermal - flashlight not needed")
 		return
 	var new_state: bool = true
 	if is_instance_valid(soldiers[0]):
@@ -264,6 +263,14 @@ func _on_nvg() -> void:
 	if all_have_nvg_or_veteran:
 		_show_notification("Squad already equipped with NVG or veterans!")
 		return
+	if _eco != null and _eco.spend_sp(60):
+		for s in soldiers:
+			if is_instance_valid(s):
+				s.set("has_nvg", true)
+				s.set("flashlight_on", false)
+		_show_notification("NVG issued to squad!")
+	else:
+		_show_notification("Not enough SP")
 
 func _on_aim_overlay_draw() -> void:
 	var selected: Node2D = _get_selected_squad()
@@ -286,11 +293,11 @@ func _on_aim_overlay_draw() -> void:
 	var mouse_world: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * get_viewport().get_mouse_position()
 	if _build_fort_type >= 0:
 		if _build_anchor_set == false:
-			var in_range: bool = center.distance_to(mouse_world) <= BUILD_MAX_RANGE
-			var color: Color = Color(0.2, 1.0, 0.3, 0.45) if in_range else Color(1.0, 0.2, 0.2, 0.45)
+			var b_in_range: bool = center.distance_to(mouse_world) <= BUILD_MAX_RANGE
+			var b_color: Color = Color(0.2, 1.0, 0.3, 0.45) if b_in_range else Color(1.0, 0.2, 0.2, 0.45)
 			_aim_overlay.draw_arc(center, BUILD_MAX_RANGE, 0.0, TAU, 48, Color(0.9, 0.9, 0.9, 0.5), 1.5)
-			_aim_overlay.draw_line(center, mouse_world, color, 1.5)
-			_aim_overlay.draw_circle(mouse_world, 8.0, color)
+			_aim_overlay.draw_line(center, mouse_world, b_color, 1.5)
+			_aim_overlay.draw_circle(mouse_world, 8.0, b_color)
 		else:
 			_build_rotation = (mouse_world - _build_anchor_pos).angle() + PI / 2.0
 			_aim_overlay.draw_line(_build_anchor_pos, mouse_world, Color(0.9, 0.9, 0.2, 0.7), 2.0)
@@ -556,6 +563,7 @@ func _aoe_damage(center: Vector2, radius: float, damage: int) -> void:
 	flash.size = Vector2(radius * 2.0, radius * 2.0)
 	flash.position = center - Vector2(radius, radius)
 	flash.color = Color(1.0, 0.5, 0.0, 0.7)
+	flash.z_index = 50
 	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	flash.name = "AOEFlash"
 	flash.add_to_group("mission_cleanup")

@@ -30,6 +30,7 @@ func _ready() -> void:
 				rect.color = Color(0.9, 0.3, 0.1, 0.35)
 			_:
 				rect.color = Color(0.1, 0.6, 0.9, 0.35)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(rect)
 
 	add_to_group("anomaly_zones")

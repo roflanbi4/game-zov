@@ -45,8 +45,6 @@ func _ready() -> void:
 	_grid.position = Vector2(10.0, vp_height - 95.0)
 	add_child(_grid)
 
-	add_child(_grid)
-
 	_infantry_btn = _make_btn("Infantry (100 SP)", "Hire cheap 3-man recruit squad", _on_infantry)
 	_veteran_btn = _make_btn("Veterans (220 SP)", "Experienced squad with better aim and morale", _on_veteran_squad)
 	_sapper_btn = _make_btn("Sapper (80 SP)", "Sapper: mines, wire, anomaly disarming", _on_sapper)
@@ -172,7 +170,7 @@ func _get_free_spawn_pos(origin: Vector2 = Vector2(200.0, 400.0)) -> Vector2:
 	var groups_to_check: Array[String] = ["player_units", "player_vehicles", "player_drones"]
 	for attempt in range(50):
 		var dx: int = (attempt % 7) - 3
-		var dy: int = attempt / 7 - 3
+		var dy: int = int(float(attempt) / 7.0) - 3
 		var candidate: Vector2 = origin + Vector2(dx * 65.0, dy * 65.0)
 		if candidate.x < 60.0 or candidate.x > 1860.0 or candidate.y < 60.0 or candidate.y > 1020.0:
 			continue
@@ -238,11 +236,7 @@ func _spawn_veteran_squad() -> void:
 		squad.add_child(soldier)
 		soldier.add_to_group("player_units")
 	get_tree().current_scene.call_deferred("add_child", squad)
-	for s in squad.get("soldiers"):
-		if is_instance_valid(s):
-			var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
-			if vc != null:
-				vc.add_xp(100)
+	call_deferred("_grant_veteran_xp", squad)
 
 func _spawn_at_squad() -> void:
 	var squad = _SQUAD_SCRIPT.new()
@@ -296,3 +290,15 @@ func _spawn_ew_vehicle() -> void:
 	vehicle.is_ew_jammer = true
 	get_tree().current_scene.call_deferred("add_child", vehicle)
 
+
+func _grant_veteran_xp(squad: Node) -> void:
+	if not is_instance_valid(squad):
+		return
+	var soldiers: Array = squad.get("soldiers")
+	if soldiers == null:
+		return
+	for s in soldiers:
+		if is_instance_valid(s):
+			var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+			if vc != null:
+				vc.add_xp(100)

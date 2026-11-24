@@ -1,6 +1,7 @@
 class_name VehicleUnit
 extends CharacterBody2D
 
+@export var is_ew_jammer: bool = false
 @export var is_enemy: bool = false
 @export var max_hp: int = 300
 @export var armor: float = 0.35
@@ -9,7 +10,6 @@ extends CharacterBody2D
 @export var attack_damage: int = 40
 @export var attack_cooldown: float = 1.2
 
-var current_hp: int
 var target_position: Vector2 = Vector2.ZERO
 var attack_move: bool = false
 var hold_mode: bool = false
@@ -60,7 +60,6 @@ func _ready() -> void:
 	nav_agent.name = "NavigationAgent2D"
 	add_child(nav_agent)
 
-	current_hp = max_hp
 	set_physics_process(false)
 
 func set_destination(destination: Vector2) -> void:
@@ -88,6 +87,14 @@ func stop() -> void:
 
 func set_attack_move(enabled: bool) -> void:
 	attack_move = enabled
+
+func _process(_delta: float) -> void:
+	if is_ew_jammer:
+		var target_group: String = "enemy_drones" if not is_enemy else "player_drones"
+		for d in get_tree().get_nodes_in_group(target_group):
+			if is_instance_valid(d) and d is Node2D:
+				if global_position.distance_to((d as Node2D).global_position) <= 220.0:
+					d.set("disabled", true)
 
 func _physics_process(_delta: float) -> void:
 	if nav_agent.is_navigation_finished():
