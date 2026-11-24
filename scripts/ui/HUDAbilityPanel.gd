@@ -15,6 +15,7 @@ var _mine_mode: bool = false
 var _artillery_mode: bool = false
 var _grenade_mode: bool = false
 var _flare_mode: bool = false
+var _smoke_mode: bool = false
 
 
 # Build fort state
@@ -37,6 +38,7 @@ var _grenade_btn: Button = null
 var _flashlight_btn: Button = null
 var _nvg_btn: Button = null
 var _cancel_mode_btn: Button = null
+var _smoke_btn: Button = null
 
 # Formation names (English)
 var formation_names: Array = ["Line", "Column", "Wedge", "Spread"]
@@ -93,6 +95,10 @@ func _ready() -> void:
 	_cancel_mode_btn = _make_btn("Cancel", "Cancel current build mode", _on_cancel_mode_pressed)
 	_cancel_mode_btn.visible = false
 	abil_hbox.add_child(_cancel_mode_btn)
+
+	_smoke_btn = _make_btn("Smoke (40 SP)", "Deploy smoke screen (requires radio)", _on_smoke_screen)
+	_smoke_btn.visible = false
+	abil_hbox.add_child(_smoke_btn)
 
 	# Second row: tactical commands
 	var tac_hbox := HBoxContainer.new()
@@ -209,6 +215,23 @@ func _on_grenade() -> void:
 		_mine_mode = false
 		_artillery_mode = false
 		_flare_mode = false
+
+func _on_smoke_screen() -> void:
+	var target_squad: Node2D = _get_selected_squad()
+	if target_squad == null:
+		_show_notification("First select a squad!")
+		return
+	var spec: SpecialistComponent = target_squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
+	if spec == null or spec.specialist_type != SpecialistComponent.Type.RADIO:
+		_show_notification("Squad must have a radio operator!")
+		return
+	if _eco != null and _eco.spend_sp(40):
+		_smoke_mode = true
+		_mine_mode = false
+		_grenade_mode = false
+		_artillery_mode = false
+		_flare_mode = false
+		_build_fort_type = -1
 
 func enable_flare_mode() -> void:
 	if _eco != null and _eco.spend_sp(30):
@@ -338,6 +361,7 @@ func _on_cancel_mode_pressed() -> void:
 	_grenade_mode = false
 	_artillery_mode = false
 	_flare_mode = false
+	_smoke_mode = false
 	_build_fort_type = -1
 	_build_anchor_set = false
 
@@ -359,7 +383,7 @@ func _process(_delta: float) -> void:
 	visible = true
 
 	if _cancel_mode_btn != null:
-		_cancel_mode_btn.visible = (_mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0)
+		_cancel_mode_btn.visible = (_mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _smoke_mode or _build_fort_type >= 0)
 
 	var spec: SpecialistComponent = squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
 	if _mine_btn != null:
@@ -372,6 +396,8 @@ func _process(_delta: float) -> void:
 			_turret_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER)
 	if _arty_btn != null:
 		_arty_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.RADIO)
+	if _smoke_btn != null:
+		_smoke_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.RADIO)
 
 	var soldiers: Array = squad.get("soldiers")
 	if _flashlight_btn != null and squad != null:
@@ -406,11 +432,12 @@ func _input(event: InputEvent) -> void:
 			_build_anchor_set = false
 			get_viewport().set_input_as_handled()
 			return
-		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0:
+		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _smoke_mode or _build_fort_type >= 0:
 			_mine_mode = false
 			_grenade_mode = false
 			_artillery_mode = false
 			_flare_mode = false
+			_smoke_mode = false
 			_build_fort_type = -1
 			_build_anchor_set = false
 			get_viewport().set_input_as_handled()
@@ -421,11 +448,12 @@ func _input(event: InputEvent) -> void:
 			_build_anchor_set = false
 			get_viewport().set_input_as_handled()
 			return
-		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0:
+		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _smoke_mode or _build_fort_type >= 0:
 			_mine_mode = false
 			_grenade_mode = false
 			_artillery_mode = false
 			_flare_mode = false
+			_smoke_mode = false
 			_build_fort_type = -1
 			_build_anchor_set = false
 			get_viewport().set_input_as_handled()
@@ -510,6 +538,28 @@ func _input(event: InputEvent) -> void:
 					_aoe_damage(world_pos, 50.0, 60)
 				else:
 					_show_notification("Not enough SP")
+			return
+		if _smoke_mode:
+			_smoke_mode = false
+			get_viewport().set_input_as_handled()
+			if _eco != null and _eco.spend_sp(40):
+				var smoke: Node2D = Node2D.new()
+				smoke.name = "SmokeCloud"
+				smoke.global_position = world_pos
+				smoke.add_to_group("smoke_clouds")
+				smoke.add_to_group("mission_cleanup")
+				var smoke_rect: ColorRect = ColorRect.new()
+				smoke_rect.size = Vector2(220.0, 220.0)
+				smoke_rect.position = Vector2(-110.0, -110.0)
+				smoke_rect.color = Color(0.5, 0.5, 0.5, 0.45)
+				smoke_rect.z_index = 45
+				smoke_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				smoke.add_child(smoke_rect)
+				get_tree().current_scene.add_child(smoke)
+				var timer := get_tree().create_timer(12.0)
+				timer.timeout.connect(smoke.queue_free)
+			else:
+				_show_notification("Not enough SP")
 			return
 		if _build_fort_type >= 0:
 			get_viewport().set_input_as_handled()

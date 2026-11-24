@@ -8,6 +8,7 @@ enum Type { NONE = 0, MEDIC = 1, SAPPER = 2, RADIO = 3 }
 var squad_controller: Node2D = null
 var _radio_applied: bool = false
 var _heal_accum: float = 0.0
+var _repair_accum: float = 0.0
 
 func _ready() -> void:
 	if squad_controller == null:
@@ -58,6 +59,32 @@ func _process(delta: float) -> void:
 		return
 	if specialist_type == Type.MEDIC:
 		_process_medic(delta, soldiers)
+	if specialist_type == Type.SAPPER:
+		_process_sapper_repair(delta, soldiers)
+
+func _process_sapper_repair(delta: float, soldiers: Array) -> void:
+	_repair_accum += delta
+	if _repair_accum < 1.0:
+		return
+	_repair_accum = 0.0
+
+	var vehicles: Array = get_tree().get_nodes_in_group("player_vehicles")
+	vehicles.append_array(get_tree().get_nodes_in_group("player_turrets"))
+
+	for v in vehicles:
+		if not is_instance_valid(v) or not (v is Node2D):
+			continue
+		var health: HealthComponent = v.get_node_or_null("HealthComponent") as HealthComponent
+		if health == null:
+			continue
+		if health.current_hp >= health.max_hp:
+			continue
+		for s in soldiers:
+			if not is_instance_valid(s) or not (s is Node2D):
+				continue
+			if (s as Node2D).global_position.distance_to((v as Node2D).global_position) <= 85.0:
+				health.current_hp = mini(health.max_hp, health.current_hp + 15)
+				break
 
 func _process_medic(delta: float, soldiers: Array) -> void:
 	_heal_accum += 4.0 * delta

@@ -38,8 +38,11 @@ func _try_spawn() -> void:
 		_spawn_enemy_vehicle()
 		_resources -= 250
 	elif _resources >= 100:
-		_spawn_enemy_squad()
+		var squad: SquadController = _spawn_enemy_squad()
 		_resources -= 100
+		if randf() < 0.35 and is_instance_valid(squad):
+			var flank_y: float = 220.0 if randf() < 0.5 else 1220.0
+			squad.move_squad(Vector2(1300.0, flank_y))
 	elif _resources >= 250:
 		_spawn_enemy_vehicle()
 		_resources -= 250
@@ -55,11 +58,11 @@ func _try_spawn() -> void:
 				if last.has_method("move_squad"):
 					last.move_squad(target.global_position)
 
-func _spawn_enemy_squad() -> void:
+func _spawn_enemy_squad() -> SquadController:
 	var squad: Node2D = _SQUAD_SCRIPT.new()
 	squad.name = "EnemySquad_" + str(_spawned_squads)
 	_spawned_squads += 1
-	squad.position = Vector2(900 + randi_range(0, 300), 300 + randi_range(0, 300))
+	squad.position = Vector2(1950.0 + randi_range(0, 400), 300.0 + randi_range(0, 850))
 	squad.add_to_group("enemy_squads")
 	for i in range(3):
 		var s := Soldier.new()
@@ -82,24 +85,25 @@ func _spawn_enemy_squad() -> void:
 		s.add_to_group("enemy_units")
 		squad.add_child(s)
 	get_parent().add_child(squad)
+	return squad
 
 func _spawn_enemy_vehicle() -> void:
 	var v := VehicleUnit.new()
 	v.name = "EnemyVehicle_" + str(_spawned_squads)
-	v.position = Vector2(1000, 500)
+	v.position = Vector2(1950.0 + randi_range(0, 400), 300.0 + randi_range(0, 850))
 	v.is_enemy = true
 	get_parent().add_child(v)
 
 func _spawn_enemy_drone() -> void:
 	var d := DroneUnit.new()
 	d.name = "EnemyDrone_" + str(_spawned_squads)
-	d.position = Vector2(1000, 500)
+	d.position = Vector2(1950.0 + randi_range(0, 400), 300.0 + randi_range(0, 850))
 	d.drone_type = DroneUnit.DroneType.FPV_KAMIKAZE
 	d.is_enemy = true
 	get_parent().add_child(d)
 
 func _nearest_enemy_target() -> Node2D:
-	var origin: Vector2 = Vector2(960.0, 540.0)
+	var origin: Vector2 = Vector2(2150.0, 720.0)
 	var best: Node2D = null
 	var best_d: float = INF
 	for cp in get_tree().get_nodes_in_group("control_points"):

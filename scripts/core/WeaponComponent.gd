@@ -135,6 +135,13 @@ func _has_line_of_sight(target: Node2D) -> bool:
 		return false
 	if not (target is Node2D):
 		return false
+	# Smoke clouds block line of sight
+	for smoke in get_tree().get_nodes_in_group("smoke_clouds"):
+		if not is_instance_valid(smoke) or not (smoke is Node2D):
+			continue
+		var closest: Vector2 = Geometry2D.get_closest_point_to_segment(smoke.global_position, global_position, (target as Node2D).global_position)
+		if closest.distance_to(smoke.global_position) <= 105.0:
+			return false
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	if space == null:
 		return true
