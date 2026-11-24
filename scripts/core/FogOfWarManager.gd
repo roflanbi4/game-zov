@@ -176,6 +176,9 @@ func _collect_sources() -> Array:
 				sources.append({"pos": cf_pos, "radius": 140.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
 	for f in _flares:
 		sources.append({"pos": f["pos"], "radius": float(f["radius"]), "thermal": false, "cone": false, "dir": Vector2.ZERO})
+	for sp in get_tree().get_nodes_in_group("spotlights"):
+		if is_instance_valid(sp) and sp is Node2D:
+			sources.append({"pos": (sp as Node2D).global_position, "radius": 280.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
 	return sources
 
 func _update_fog() -> void:

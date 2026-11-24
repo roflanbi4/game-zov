@@ -36,8 +36,8 @@ func generate_map(seed_val: int = 0) -> void:
 		road_visual.add_child(dash)
 
 	# Центрирование
-	road.position = Vector2(960.0, 540.0)
-	road_visual.position = Vector2(-960.0, -35.0)
+	road.position = Vector2(_CFG.MAP_WIDTH * 0.5, _CFG.MAP_HEIGHT * 0.5)
+	road_visual.position = Vector2(-_CFG.MAP_WIDTH * 0.5, -35.0)
 	add_child(road)
 
 	# body_entered: +30% техника, +15% пехота
@@ -74,11 +74,15 @@ func generate_map(seed_val: int = 0) -> void:
 			current_swamp_mult = float(body.get_meta("swamp_mult"))
 		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
 	)
+
+	var placed: Array[Vector2] = []
+	_build_checkpoint(rng, Vector2(1480.0, _CFG.MAP_HEIGHT * 0.5))
+	_build_ruined_town(rng, Vector2(1150.0, 340.0), placed)
+
 	if seed_val != 0:
 		rng.seed = seed_val
 	else:
 		rng.randomize()
-	var placed: Array[Vector2] = []
 	# --- БОЛОТА (3–4 зоны) ---
 	var swamp_count: int = rng.randi_range(3, 4)
 	for i in range(swamp_count):
@@ -235,9 +239,9 @@ func generate_map(seed_val: int = 0) -> void:
 		add_child(campfire)
 func _pick_free_spot(rng: RandomNumberGenerator, placed: Array[Vector2], min_dist: float) -> Vector2:
 	for attempt in range(40):
-		var x: float = float(rng.randi_range(420, 1500))
-		var y: float = float(rng.randi_range(160, 920))
-		if absf(y - 540.0) < 105.0:
+		var x: float = float(rng.randi_range(450, 2150))
+		var y: float = float(rng.randi_range(180, 1260))
+		if absf(y - _CFG.MAP_HEIGHT * 0.5) < 110.0:
 			continue
 		var candidate := Vector2(x, y)
 		var ok: bool = true
@@ -247,4 +251,147 @@ func _pick_free_spot(rng: RandomNumberGenerator, placed: Array[Vector2], min_dis
 				break
 		if ok:
 			return candidate
-	return Vector2(float(rng.randi_range(420, 1500)), 250.0)
+	return Vector2(float(rng.randi_range(450, 2150)), _CFG.MAP_HEIGHT * 0.5)
+
+func _build_checkpoint(rng: RandomNumberGenerator, pos: Vector2) -> void:
+	# Бетонные блоки поперёк дороги (оставляют проход для техники)
+	var block1: StaticBody2D = StaticBody2D.new()
+	block1.name = "CheckpointBlock1"
+	block1.position = pos + Vector2(-40.0, 0.0)
+	var cs1: CollisionShape2D = CollisionShape2D.new()
+	var rs1: RectangleShape2D = RectangleShape2D.new()
+	rs1.size = Vector2(50.0, 22.0)
+	cs1.shape = rs1
+	block1.add_child(cs1)
+	var vis1: ColorRect = ColorRect.new()
+	vis1.size = Vector2(50.0, 22.0)
+	vis1.position = Vector2(-25.0, -11.0)
+	vis1.color = Color(0.45, 0.46, 0.48)
+	vis1.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	block1.add_child(vis1)
+	add_child(block1)
+
+	var block2: StaticBody2D = StaticBody2D.new()
+	block2.name = "CheckpointBlock2"
+	block2.position = pos + Vector2(40.0, 0.0)
+	var cs2: CollisionShape2D = CollisionShape2D.new()
+	var rs2: RectangleShape2D = RectangleShape2D.new()
+	rs2.size = Vector2(50.0, 22.0)
+	cs2.shape = rs2
+	block2.add_child(cs2)
+	var vis2: ColorRect = ColorRect.new()
+	vis2.size = Vector2(50.0, 22.0)
+	vis2.position = Vector2(-25.0, -11.0)
+	vis2.color = Color(0.45, 0.46, 0.48)
+	vis2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	block2.add_child(vis2)
+	add_child(block2)
+
+	# Линии мешков с песком
+	var sandbags1: FieldFortification = FieldFortification.new()
+	sandbags1.fort_type = FieldFortification.FortType.SANDBAGS
+	sandbags1.position = pos + Vector2(0.0, -40.0)
+	sandbags1.name = "CheckpointSandbags1"
+	add_child(sandbags1)
+
+	var sandbags2: FieldFortification = FieldFortification.new()
+	sandbags2.fort_type = FieldFortification.FortType.SANDBAGS
+	sandbags2.position = pos + Vector2(0.0, 40.0)
+	sandbags2.name = "CheckpointSandbags2"
+	add_child(sandbags2)
+
+	# Взрывная бочка рядом с мешками
+	var barrel: ExplosiveProp = ExplosiveProp.new()
+	barrel.position = pos + Vector2(30.0, -30.0)
+	barrel.explosion_radius = 150.0
+	barrel.explosion_damage = 80
+	barrel.hp = 40
+	add_child(barrel)
+
+	# Разрушаемый прожектор КПП
+	var spotlight: StaticBody2D = StaticBody2D.new()
+	spotlight.name = "KPPSpotlight"
+	spotlight.position = pos + Vector2(0.0, -60.0)
+	spotlight.add_to_group("spotlights")
+	spotlight.add_to_group("enemy_units")
+	var scs: CollisionShape2D = CollisionShape2D.new()
+	var scrs: RectangleShape2D = RectangleShape2D.new()
+	scrs.size = Vector2(14.0, 14.0)
+	scs.shape = scrs
+	spotlight.add_child(scs)
+	var shp: ColorRect = ColorRect.new()
+	shp.size = Vector2(14.0, 14.0)
+	shp.position = Vector2(-7.0, -7.0)
+	shp.color = Color(1.0, 0.9, 0.2, 1.0)
+	shp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spotlight.add_child(shp)
+	var shc: HealthComponent = HealthComponent.new()
+	shc.name = "HealthComponent"
+	shc.max_hp = 60
+	shc.current_hp = 60
+	spotlight.add_child(shc)
+	shc.died.connect(func(_n: Node2D) -> void: spotlight.queue_free())
+	add_child(spotlight)
+
+	# Гарнизон врагов у КПП
+	MissionBuilder.spawn_enemy_squad(get_parent(), pos + Vector2(35.0, 0.0), 3)
+
+func _build_ruined_town(rng: RandomNumberGenerator, center: Vector2, placed: Array[Vector2]) -> void:
+	var offsets: Array[Vector2] = [
+		Vector2(-70.0, -70.0), Vector2(70.0, -70.0),
+		Vector2(-70.0, 70.0), Vector2(70.0, 70.0)
+	]
+	for off in offsets:
+		var building: StaticBody2D = StaticBody2D.new()
+		building.name = "RuinedBuilding"
+		building.position = center + off
+		building.set_meta("is_tall_wall", true)
+		var bcs: CollisionShape2D = CollisionShape2D.new()
+		var brs: RectangleShape2D = RectangleShape2D.new()
+		brs.size = Vector2(50.0, 120.0)
+		bcs.shape = brs
+		building.add_child(bcs)
+		var bvis: ColorRect = ColorRect.new()
+		bvis.size = Vector2(50.0, 120.0)
+		bvis.position = Vector2(-25.0, -60.0)
+		bvis.color = Color(0.32, 0.33, 0.36)
+		bvis.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		building.add_child(bvis)
+		add_child(building)
+
+	# Низкие укрытия во дворе
+	for i in range(4):
+		var cover: Area2D = Area2D.new()
+		cover.name = "CoverZone"
+		cover.position = center + Vector2(float(i % 2) * 60.0 - 30.0, float(int(float(i) / 2.0)) * 40.0 - 20.0)
+		var cz: CollisionShape2D = CollisionShape2D.new()
+		var czs: CircleShape2D = CircleShape2D.new()
+		czs.radius = 30.0
+		cz.shape = czs
+		cover.add_child(cz)
+		cover.set_script(load("res://scripts/components/CoverZone.gd"))
+		add_child(cover)
+
+	# Костёр в центре двора
+	var campfire: Node2D = Node2D.new()
+	campfire.name = "Campfire"
+	campfire.add_to_group("campfires")
+	campfire.add_to_group("mission_cleanup")
+	var base_rect: ColorRect = ColorRect.new()
+	base_rect.color = Color(0.12, 0.1, 0.08, 0.95)
+	base_rect.size = Vector2(14.0, 14.0)
+	base_rect.position = Vector2(-7.0, -7.0)
+	base_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	campfire.add_child(base_rect)
+	var flame: ColorRect = ColorRect.new()
+	flame.name = "Flame"
+	flame.color = Color(1.0, 0.55, 0.1, 0.95)
+	flame.size = Vector2(8.0, 8.0)
+	flame.position = Vector2(-4.0, -4.0)
+	flame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	campfire.add_child(flame)
+	campfire.position = center
+	campfire.set_script(preload("res://scripts/environment/Campfire.gd"))
+	add_child(campfire)
+
+	placed.append(center)
