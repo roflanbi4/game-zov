@@ -5,6 +5,7 @@ extends Node2D
 @export var target_group: String = "enemy_units"
 @export var morale_penalty: int = 0
 
+var is_anti_tank: bool = false
 var target_position: Vector2 = Vector2.ZERO
 var active: bool = true
 var shooter: Node2D = null
@@ -18,8 +19,29 @@ func setup(target: Vector2, projectile_speed: float, projectile_damage: int, pro
 func _process(delta: float) -> void:
 	if not active:
 		return
+	var old_pos: Vector2 = global_position
 	var dir: Vector2 = (target_position - global_position).normalized()
-	global_position += dir * speed * delta
+	var new_pos: Vector2 = global_position + dir * speed * delta
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	if space != null:
+		var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(old_pos, new_pos)
+		if shooter != null and is_instance_valid(shooter):
+			query.exclude = [shooter]
+		var result: Dictionary = space.intersect_ray(query)
+		if not result.is_empty():
+			var collider: Object = result.get("collider")
+			if collider is StaticBody2D:
+				var sb: StaticBody2D = collider as StaticBody2D
+				var hc: HealthComponent = sb.get_node_or_null("HealthComponent") as HealthComponent
+				if not collider.has_meta("is_tall_wall") and shooter != null and is_instance_valid(shooter) and shooter.global_position.distance_to((collider as Node2D).global_position) <= 65.0:
+					pass
+				else:
+					if hc != null:
+						hc.take_damage(damage)
+					active = false
+					queue_free()
+					return
+	global_position = new_pos
 	if global_position.distance_to(target_position) < 10.0:
 		_hit_target()
 		active = false
@@ -42,7 +64,9 @@ func _hit_target() -> void:
 						final_damage *= 1.25
 			var health: HealthComponent = obj.get_node_or_null("HealthComponent")
 			if health != null:
-				if obj.has_method("take_damage"):
+				if obj is VehicleUnit:
+					(obj as VehicleUnit).take_damage(int(final_damage), is_anti_tank)
+				elif obj.has_method("take_damage"):
 					obj.take_damage(int(final_damage))
 				else:
 					health.take_damage(int(final_damage))

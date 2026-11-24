@@ -268,6 +268,7 @@ func _spawn_at_squad() -> void:
 			soldier.add_child(weapon)
 		weapon.attack_range = 550.0
 		weapon.attack_damage = 45
+		weapon.is_anti_tank = true
 	get_tree().current_scene.call_deferred("add_child", squad)
 
 func _spawn_vehicle() -> void:

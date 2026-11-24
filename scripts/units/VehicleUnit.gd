@@ -116,12 +116,16 @@ func _physics_process(_delta: float) -> void:
 	velocity = dir * move_speed
 	move_and_slide()
 
-func take_damage(amount: int) -> void:
-	var reduced: int = int(amount * (1.0 - armor))
+func take_damage(amount: int, is_at: bool = false) -> void:
+	var dmg_after_armor: float = float(amount) * (1.0 - armor)
+	if not is_at:
+		dmg_after_armor *= 0.15
+	var reduced: int = int(dmg_after_armor)
 	if amount > 0 and reduced < 1:
 		reduced = 1
 	if health_component != null:
 		health_component.take_damage(reduced)
+
 
 func _on_died(_soldier: Node2D) -> void:
 	if is_enemy and randf() < 0.60:

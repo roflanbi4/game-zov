@@ -6,6 +6,7 @@ extends Node2D
 @export var attack_cooldown: float = 1.0
 @export var projectile_speed: float = 600.0
 @export var target_group: String = "enemy_units"
+@export var is_anti_tank: bool = false
 @export var burst_enabled: bool = true
 
 var detection_area: Area2D
@@ -61,6 +62,9 @@ func _process(delta: float) -> void:
 			if global_position.distance_to(current_target.global_position) > allowed:
 				current_target = null
 				return
+		if not _has_line_of_sight(current_target):
+			current_target = null
+			return
 		# Фланг-маркер: помечаем цель, если стреляем в спину
 		var prev_flanked: Node2D = _last_flanked_target
 		_last_flanked_target = null
@@ -125,6 +129,30 @@ func _get_night_allowed_distance(shooter: Node2D, target: Node2D) -> float:
 			return 140.0  # новичок без ПНВ и с выключенным фонариком
 	return attack_range
 
+func _has_line_of_sight(target: Node2D) -> bool:
+	var shooter: Node2D = get_parent() as Node2D
+	if shooter == null or not is_instance_valid(shooter):
+		return false
+	if not (target is Node2D):
+		return false
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	if space == null:
+		return true
+	var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(global_position, (target as Node2D).global_position)
+	query.exclude = [shooter]
+	var result: Dictionary = space.intersect_ray(query)
+	if result.is_empty():
+		return true
+	var collider: Object = result.get("collider")
+	if collider is StaticBody2D:
+		var sb: StaticBody2D = collider as StaticBody2D
+		if not collider.has_meta("is_tall_wall"):
+			if shooter.global_position.distance_to((collider as Node2D).global_position) <= 65.0:
+				return true
+			return false
+		return false
+	return true
+
 func _find_target() -> void:
 	var bodies: Array = detection_area.get_overlapping_bodies()
 	var nearest: Node2D = null
@@ -152,7 +180,7 @@ func _find_target() -> void:
 						allowed = 130.0
 			else:
 				allowed = _get_night_allowed_distance(shooter, body)
-		if dist <= allowed and dist < nearest_dist:
+		if dist <= allowed and dist < nearest_dist and _has_line_of_sight(body):
 			nearest_dist = dist
 			nearest = body
 	current_target = nearest
@@ -177,14 +205,16 @@ func _shoot() -> void:
 	bullet.set_script(script_res)
 	bullet.set("shooter", get_parent())
 	var rect := ColorRect.new()
-	rect.size = Vector2(6, 6)
-	rect.position = Vector2(-3, -3)
+	rect.size = Vector2(12.0, 2.5)
+	rect.position = Vector2(-6.0, -1.25)
 	rect.color = Color.YELLOW
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bullet.add_child(rect)
 	bullet.global_position = muzzle.global_position
+	bullet.rotation = (current_target.global_position - muzzle.global_position).angle()
 	get_tree().current_scene.add_child(bullet)
 	bullet.add_to_group("mission_cleanup")
+	bullet.set("is_anti_tank", is_anti_tank)
 	bullet.setup(current_target.global_position, projectile_speed, attack_damage, target_group)
 	if has_meta("morale_penalty"):
 		bullet.morale_penalty = int(get_meta("morale_penalty"))

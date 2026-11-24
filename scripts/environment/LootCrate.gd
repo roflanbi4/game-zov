@@ -92,11 +92,13 @@ func _upgrade_weapon(body: Node2D) -> void:
 				if weapon != null:
 					weapon.attack_damage += 12
 					weapon.attack_range += 60.0
+					weapon.is_anti_tank = true
 	else:
 		var weapon: WeaponComponent = body.get_node_or_null("WeaponComponent") as WeaponComponent
 		if weapon != null:
 			weapon.attack_damage += 12
 			weapon.attack_range += 60.0
+			weapon.is_anti_tank = true
 
 func _show_notification() -> void:
 	var hud: Node = get_tree().get_first_node_in_group("game_hud")

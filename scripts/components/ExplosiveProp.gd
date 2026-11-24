@@ -55,7 +55,9 @@ func _explode() -> void:
 		if dist > explosion_radius:
 			continue
 		var health: HealthComponent = (body as Node).get_node_or_null("HealthComponent") as HealthComponent
-		if health != null:
+		if body is VehicleUnit:
+			(body as VehicleUnit).take_damage(explosion_damage, true)
+		elif health != null:
 			health.take_damage(explosion_damage)
 		elif body.has_method("take_damage"):
 			body.take_damage(explosion_damage)

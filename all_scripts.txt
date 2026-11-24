@@ -1,0 +1,5130 @@
+﻿
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\ai\MutantWaveSpawner.gd ===
+
+class_name MutantWaveSpawner
+extends Node
+
+# Step 7: РЎРїР°РІРЅРµСЂ РІРѕР»РЅ РјСѓС‚Р°РЅС‚РѕРІ (Swarmers вЂ” Р±С‹СЃС‚СЂС‹Рµ Р±Р»РёР¶РЅРёРєРё, Brutes вЂ” С‚СЏР¶С‘Р»С‹Рµ)
+# РњСѓС‚Р°РЅС‚С‹ СЃРѕР·РґР°СЋС‚СЃСЏ РєР°Рє SquadController (РіСЂСѓРїРїС‹ "mutants" + "enemy_squads"),
+# РїРѕСЌС‚РѕРјСѓ Soldier._ready РєРѕСЂСЂРµРєС‚РЅРѕ РєР»Р°РґС‘С‚ Р±РѕР№С†РѕРІ РІ РіСЂСѓРїРїСѓ "enemy_units".
+
+const _SQUAD_SCRIPT := preload("res://scripts/core/SquadController.gd")
+
+@export var swarm_count: int = 6
+@export var brute_count: int = 2
+@export var wave_interval: float = 10.0
+@export var max_waves: int = 3
+@export var spawn_points: Array = [Vector2(1700, 200), Vector2(1700, 800)]
+
+signal wave_spawned(wave_number: int)
+signal all_waves_spawned()
+
+var _wave: int = 0
+var _timer: float = 3.0
+var _retarget: float = 0.0
+var _done: bool = false
+
+func _process(delta: float) -> void:
+	if _done:
+		return
+	_timer -= delta
+	if _timer <= 0.0:
+		_timer = wave_interval
+		_spawn_wave()
+	_retarget += delta
+	if _retarget >= 1.0:
+		_retarget = 0.0
+		_retarget_mutants()
+
+func _spawn_wave() -> void:
+	_wave += 1
+	wave_spawned.emit(_wave)
+	var base: Vector2 = spawn_points[_wave % spawn_points.size()]
+	for i in range(swarm_count):
+		_make_mutant("swarmer", base + Vector2(i * 30, i * 18))
+	for i in range(brute_count):
+		_make_mutant("brute", base + Vector2(i * 60, 120 + i * 40))
+	if _wave >= max_waves:
+		_done = true
+		all_waves_spawned.emit()
+
+func _make_mutant(kind: String, pos: Vector2) -> void:
+	var pack: Node2D = _SQUAD_SCRIPT.new()
+	pack.name = "MutantPack_" + kind + str(_wave) + "_" + str(randi())
+	pack.position = pos
+	pack.add_to_group("mutants")
+	pack.add_to_group("enemy_squads")
+	var s := Soldier.new()
+	s.name = "Mutant"
+	var nav := NavigationAgent2D.new()
+	nav.name = "NavigationAgent2D"
+	s.add_child(nav)
+	var cs := CollisionShape2D.new()
+	var circ := CircleShape2D.new()
+	circ.radius = 6.0
+	cs.shape = circ
+	s.add_child(cs)
+	var rect := ColorRect.new()
+	var hp: int = 40
+	var spd: float = 300.0
+	# Р‘Р»РёР¶РЅРёР№ Р±РѕР№: СЃРєРѕСЂРѕСЃС‚СЊ Р°С‚Р°РєРё 28.0, РїСѓР»СЊ 2000.0
+	var dmg: int = 25
+	var cd: float = 0.6
+	if kind == "brute":
+		rect.size = Vector2(30, 30)
+		rect.position = Vector2(-15, -15)
+		rect.color = Color(0.55, 0.1, 0.75)
+		hp = 260
+		spd = 90.0
+		dmg = 45
+		cd = 1.4
+	else:
+		rect.size = Vector2(14, 14)
+		rect.position = Vector2(-7, -7)
+		rect.color = Color(0.75, 0.3, 1.0)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	s.add_child(rect)
+	var hc := HealthComponent.new()
+	hc.name = "HealthComponent"
+	hc.max_hp = hp
+	s.add_child(hc)
+	var wc := WeaponComponent.new()
+	wc.name = "WeaponComponent"
+	# Р‘Р»РёР¶РЅРёР№ Р±РѕР№: СѓСЂРѕРЅ РјРіРЅРѕРІРµРЅРЅРѕ, Р±РµР· РїСѓР»СЊ
+	wc.attack_range = 42.0 if kind == "brute" else 34.0
+	wc.attack_damage = dmg
+	wc.attack_cooldown = cd
+	wc.projectile_speed = 2000.0
+	wc.target_group = "player_units"
+	s.add_child(wc)
+	pack.add_child(s)
+	# РџСЂРёСЃРІРѕРёРј СЃРєРѕСЂРѕСЃС‚СЊ movement
+	s.move_speed = spd
+	get_parent().add_child(pack)
+
+func _retarget_mutants() -> void:
+	for pack in get_tree().get_nodes_in_group("mutants"):
+		if not is_instance_valid(pack) or not (pack is Node2D):
+			continue
+		for s in pack.get("soldiers"):
+			if not is_instance_valid(s):
+				continue
+			var best := _nearest_foe(s)
+			if best == null:
+				continue
+			# РСЃРїРѕР»СЊР·СѓРµРј move_squad Сѓ РїР°РєР°, РµСЃР»Рё РґРѕСЃС‚СѓРїРµРЅ
+			if pack.has_method("move_squad"):
+				pack.move_squad(best.global_position)
+			else:
+				s.set_destination(best.global_position)
+			var w := s.get_node_or_null("WeaponComponent") as WeaponComponent
+			if w != null:
+				w.target_group = "player_units" if best.is_in_group("player_units") else "enemy_units"
+
+func _nearest_foe(from: Node2D) -> Node2D:
+	var best: Node2D = null
+	var best_d: float = INF
+	for g in ["player_units", "enemy_units"]:
+		for n in get_tree().get_nodes_in_group(g):
+			if not is_instance_valid(n) or n == from or n.is_in_group("mutants"):
+				continue
+			var d: float = from.global_position.distance_squared_to(n.global_position)
+			if d < best_d:
+				best_d = d
+				best = n
+	return best
+
+func alive_mutants() -> int:
+	var c: int = 0
+	for pack in get_tree().get_nodes_in_group("mutants"):
+		if is_instance_valid(pack) and (pack is Node2D):
+			var arr: Array = pack.get("soldiers")
+			if arr != null:
+				c += arr.size()
+	return c
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\ai\SkirmishAI.gd ===
+
+class_name SkirmishAI
+extends Node
+
+# Step 7: РЎРєРёСЂРјРёС€-РР вЂ” РєРѕРїРёС‚ СЂРµСЃСѓСЂСЃС‹, СЃРїР°РІРЅРёС‚ РІСЂР°Р¶РµСЃРєРёРµ РѕС‚СЂСЏРґС‹/С‚РµС…РЅРёРєСѓ, Р°С‚Р°РєСѓРµС‚.
+
+const _SQUAD_SCRIPT := preload("res://scripts/core/SquadController.gd")
+
+@export var think_interval: float = 15.0
+@export var starting_resources: int = 150
+
+var _resources: int = 150
+var _timer: float = 0.0
+var _spawned_squads: int = 0
+
+signal resources_changed(amount: int)
+
+func _ready() -> void:
+	_resources = starting_resources
+
+func _process(delta: float) -> void:
+	_timer += delta
+	if _timer >= think_interval:
+		_timer = 0.0
+		_generate_resources()
+		_try_spawn()
+
+func _generate_resources() -> void:
+	_resources += 60
+	resources_changed.emit(_resources)
+
+func _try_spawn() -> void:
+	if _resources < 75:
+		return
+	if get_tree().get_nodes_in_group("enemy_squads").size() > 6:
+		return
+	var target: Node2D = _nearest_enemy_target()
+	if _resources >= 250 and randf() < 0.4:
+		_spawn_enemy_vehicle()
+		_resources -= 250
+	elif _resources >= 100:
+		_spawn_enemy_squad()
+		_resources -= 100
+	elif _resources >= 250:
+		_spawn_enemy_vehicle()
+		_resources -= 250
+	elif _resources >= 75:
+		_spawn_enemy_drone()
+		_resources -= 75
+	if target != null and is_instance_valid(target):
+		var squads: Array = get_tree().get_nodes_in_group("enemy_squads")
+		var last: Node2D = null
+		for s in squads:
+			if is_instance_valid(s) and s != last:
+				last = s
+				if last.has_method("move_squad"):
+					last.move_squad(target.global_position)
+
+func _spawn_enemy_squad() -> void:
+	var squad: Node2D = _SQUAD_SCRIPT.new()
+	squad.name = "EnemySquad_" + str(_spawned_squads)
+	_spawned_squads += 1
+	squad.position = Vector2(900 + randi_range(0, 300), 300 + randi_range(0, 300))
+	squad.add_to_group("enemy_squads")
+	for i in range(3):
+		var s := Soldier.new()
+		s.name = "EnemySoldier_" + str(i)
+		s.position = Vector2(i * 24 - 24, 0)
+		var nav := NavigationAgent2D.new()
+		nav.name = "NavigationAgent2D"
+		s.add_child(nav)
+		var cs := CollisionShape2D.new()
+		var circ := CircleShape2D.new()
+		circ.radius = 6.0
+		cs.shape = circ
+		s.add_child(cs)
+		var rect := ColorRect.new()
+		rect.size = Vector2(16, 16)
+		rect.position = Vector2(-8, -8)
+		rect.color = Color(0.8, 0.2, 0.2, 1)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		s.add_child(rect)
+		s.add_to_group("enemy_units")
+		squad.add_child(s)
+	get_parent().add_child(squad)
+
+func _spawn_enemy_vehicle() -> void:
+	var v := VehicleUnit.new()
+	v.name = "EnemyVehicle_" + str(_spawned_squads)
+	v.position = Vector2(1000, 500)
+	v.is_enemy = true
+	get_parent().add_child(v)
+
+func _spawn_enemy_drone() -> void:
+	var d := DroneUnit.new()
+	d.name = "EnemyDrone_" + str(_spawned_squads)
+	d.position = Vector2(1000, 500)
+	d.drone_type = DroneUnit.DroneType.FPV_KAMIKAZE
+	d.is_enemy = true
+	get_parent().add_child(d)
+
+func _nearest_enemy_target() -> Node2D:
+	var origin: Vector2 = Vector2(960.0, 540.0)
+	var best: Node2D = null
+	var best_d: float = INF
+	for cp in get_tree().get_nodes_in_group("control_points"):
+		var d: float = origin.distance_to(cp.global_position)
+		if d < best_d:
+			best_d = d
+			best = cp
+	for n in get_tree().get_nodes_in_group("player_units"):
+		var d2: float = origin.distance_to(n.global_position)
+		if d2 < best_d:
+			best_d = d2
+			best = n
+	return best
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\buildings\ControlPoint.gd ===
+
+class_name ControlPoint
+extends Area2D
+
+enum Owner { NONE = 0, PLAYER = 1, ENEMY = 2 }
+
+@export var capture_radius: float = 80.0
+@export var capture_time: float = 5.0
+@export var capture_point_income: float = 5.0
+@export var spawn_position: Vector2 = Vector2(200, 400)
+
+
+var point_owner: int = Owner.NONE
+var capture_timer: float = 0.0
+var is_capturing: bool = false
+
+var player_units_inside: int = 0
+var enemy_units_inside: int = 0
+
+var indicator: ColorRect
+var _progress_bar: ColorRect
+
+signal captured(new_owner: int)
+
+func _ready() -> void:
+	monitoring = true
+	monitorable = false
+	add_to_group("control_points")
+	
+	if get_node_or_null("CollisionShape2D") == null:
+		var cs := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = capture_radius
+		cs.shape = circle
+		add_child(cs)
+	
+	if get_node_or_null("Indicator") == null:
+		var rect := ColorRect.new()
+		rect.size = Vector2(32.0, 32.0)
+		rect.position = Vector2(-16.0, -16.0)
+		rect.color = Color.GRAY
+		rect.name = "Indicator"
+		add_child(rect)
+	indicator = get_node("Indicator")
+	
+	# РџСЂРѕРіСЂРµСЃСЃ-Р±Р°СЂ Р·Р°С…РІР°С‚Р° (РЅР°Рґ РёРЅРґРёРєР°С‚РѕСЂРѕРј, 0в†’40 px)
+	var pb := ColorRect.new()
+	pb.name = "CaptureProgress"
+	pb.size = Vector2(0.0, 4.0)
+	pb.position = Vector2(0.0, -16.0)
+	pb.color = Color.GREEN
+	add_child(pb)
+	_progress_bar = pb
+	
+	body_entered.connect(_on_body_entered)
+	body_exited.connect(_on_body_exited)
+
+var _income_timer: float = 0.0
+
+func _process(delta: float) -> void:
+	_update_capture_state()
+	if is_capturing:
+		capture_timer = minf(capture_time, capture_timer + delta)
+		# РћР±РЅРѕРІР»СЏРµРј РїСЂРѕРіСЂРµСЃСЃ-Р±Р°СЂ
+		var progress: float = capture_timer / capture_time
+		_progress_bar.size = Vector2(40.0 * progress, 4.0)
+		_progress_bar.position = Vector2(-20.0, -16.0)
+		if capture_timer >= capture_time:
+			capture_timer = 0.0
+			is_capturing = false
+			point_owner = current_captor()
+			_update_indicator()
+			_progress_bar.size = Vector2(0.0, 4.0)
+			captured.emit(point_owner)
+	
+	if point_owner == Owner.PLAYER:
+		_income_timer += delta
+		if _income_timer >= 1.0:
+			_income_timer -= 1.0
+			var eco: EconomyManager = get_tree().get_first_node_in_group("economy") as EconomyManager
+			if eco != null:
+				eco.add_sp(int(capture_point_income))
+
+func _on_body_entered(_body: Node2D) -> void:
+	_update_capture_state()
+
+func _on_body_exited(_body: Node2D) -> void:
+	_update_capture_state()
+
+func _update_capture_state() -> void:
+	player_units_inside = 0
+	enemy_units_inside = 0
+	for body in get_overlapping_bodies():
+		if not is_instance_valid(body):
+			continue
+		if not (body is Node2D):
+			continue
+		if body.is_in_group("player_units"):
+			player_units_inside += 1
+		elif body.is_in_group("enemy_units"):
+			enemy_units_inside += 1
+	var total: int = player_units_inside + enemy_units_inside
+	if total == 0:
+		is_capturing = false
+		capture_timer = 0.0
+		_update_indicator()
+		_progress_bar.size = Vector2(0.0, 4.0)
+		return
+
+	# Р•СЃР»Рё С‚РѕС‡РєР° СѓР¶Рµ Р·Р°С…РІР°С‡РµРЅР° СЌС‚РѕР№ СЃС‚РѕСЂРѕРЅРѕР№ вЂ” РЅРµ РЅР°С‡РёРЅР°РµРј Р·Р°С…РІР°С‚ Р·Р°РЅРѕРІРѕ
+	if point_owner == Owner.PLAYER and player_units_inside > 0 and enemy_units_inside == 0:
+		is_capturing = false
+		capture_timer = 0.0
+		_progress_bar.size = Vector2(0.0, 4.0)
+		return
+	if point_owner == Owner.ENEMY and enemy_units_inside > 0 and player_units_inside == 0:
+		is_capturing = false
+		capture_timer = 0.0
+		_progress_bar.size = Vector2(0.0, 4.0)
+		return
+
+	if player_units_inside > 0 and enemy_units_inside == 0:
+		is_capturing = true
+		# РЅРµ РєСЂР°СЃРёРј РѕСЃРЅРѕРІРЅРѕР№ РєРІР°РґСЂР°С‚ РґРѕ Р·Р°РІРµСЂС€РµРЅРёСЏ Р·Р°С…РІР°С‚Р°
+	elif enemy_units_inside > 0 and player_units_inside == 0:
+		is_capturing = true
+	else:
+		is_capturing = false
+		capture_timer = 0.0
+		_progress_bar.size = Vector2(0.0, 4.0)
+
+func current_captor() -> int:
+	if player_units_inside > 0 and enemy_units_inside == 0:
+		return Owner.PLAYER
+	elif enemy_units_inside > 0 and player_units_inside == 0:
+		return Owner.ENEMY
+	return Owner.NONE
+
+func _update_indicator() -> void:
+	match point_owner:
+		Owner.PLAYER:
+			indicator.color = Color.BLUE
+		Owner.ENEMY:
+			indicator.color = Color.RED
+		_:
+			indicator.color = Color.GRAY
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\buildings\FieldFortification.gd ===
+
+class_name FieldFortification
+extends StaticBody2D
+
+enum FortType { SANDBAGS = 0, BARBED_WIRE = 1, AUTO_TURRET = 2 }
+
+@export var fort_type: int = FortType.SANDBAGS
+
+var health_component: HealthComponent
+
+func _ready() -> void:
+	add_to_group("mission_cleanup")
+	health_component = HealthComponent.new()
+	health_component.name = "HealthComponent"
+	add_child(health_component)
+	health_component.died.connect(_on_died)
+	match fort_type:
+		FortType.SANDBAGS:
+			_build_sandbags()
+		FortType.BARBED_WIRE:
+			_build_barbed_wire()
+		FortType.AUTO_TURRET:
+			_build_auto_turret()
+
+func _build_sandbags() -> void:
+	health_component.max_hp = 180
+	health_component.current_hp = 180
+	var shape := CollisionShape2D.new()
+	var rect_shape := RectangleShape2D.new()
+	rect_shape.size = Vector2(48.0, 16.0)
+	shape.shape = rect_shape
+	add_child(shape)
+	var visual := ColorRect.new()
+	visual.size = Vector2(48.0, 16.0)
+	visual.position = Vector2(-24.0, -8.0)
+	visual.color = Color(0.76, 0.68, 0.48)
+	visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(visual)
+	var cover_zone := Area2D.new()
+	cover_zone.name = "CoverZone"
+	cover_zone.set_script(preload("res://scripts/components/CoverZone.gd"))
+	var cover_shape := CollisionShape2D.new()
+	var cover_circle := CircleShape2D.new()
+	cover_circle.radius = 45.0
+	cover_shape.shape = cover_circle
+	cover_zone.add_child(cover_shape)
+	add_child(cover_zone)
+
+func _build_barbed_wire() -> void:
+	health_component.max_hp = 100
+	health_component.current_hp = 100
+	collision_layer = 0
+	var visual := ColorRect.new()
+	visual.size = Vector2(56.0, 14.0)
+	visual.position = Vector2(-28.0, -7.0)
+	visual.color = Color(0.55, 0.58, 0.62)
+	visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(visual)
+	var damage_zone := Area2D.new()
+	damage_zone.name = "WireDamageZone"
+	var zone_shape := CollisionShape2D.new()
+	var zone_rect := RectangleShape2D.new()
+	zone_rect.size = Vector2(56.0, 22.0)
+	zone_shape.shape = zone_rect
+	damage_zone.add_child(zone_shape)
+	damage_zone.set_script(preload("res://scripts/buildings/WireDamage.gd"))
+	add_child(damage_zone)
+
+func _build_auto_turret() -> void:
+	health_component.max_hp = 220
+	health_component.current_hp = 220
+	add_to_group("player_units")
+	add_to_group("player_turrets")
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 11.0
+	shape.shape = circle
+	add_child(shape)
+	var visual := ColorRect.new()
+	visual.size = Vector2(22.0, 22.0)
+	visual.position = Vector2(-11.0, -11.0)
+	visual.color = Color(0.25, 0.65, 0.85)
+	visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(visual)
+	var weapon := WeaponComponent.new()
+	weapon.name = "WeaponComponent"
+	weapon.attack_range = 380.0
+	weapon.attack_damage = 22
+	weapon.attack_cooldown = 0.65
+	weapon.target_group = "enemy_units"
+	weapon.burst_enabled = false
+	weapon.set_meta("morale_penalty", 12)
+	add_child(weapon)
+
+func _on_died(_body: Node2D) -> void:
+	queue_free()
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\buildings\WireDamage.gd ===
+
+extends Area2D
+
+var _accum: float = 0.0
+
+func _ready() -> void:
+	body_exited.connect(_on_body_exited)
+
+func _process(delta: float) -> void:
+	for body in get_overlapping_bodies():
+		if not (body is Node2D):
+			continue
+		var groups: Array = body.get_groups()
+		if "enemy_units" not in groups and "mutants" not in groups:
+			continue
+		if not body.has_meta("pre_wire_speed"):
+			body.set_meta("pre_wire_speed", body.get("move_speed"))
+		body.set("move_speed", float(body.get_meta("pre_wire_speed")) * 0.45)
+		_accum += 4.0 * delta
+		if _accum >= 1.0:
+			_accum -= 1.0
+			var health: HealthComponent = body.get_node_or_null("HealthComponent") as HealthComponent
+			if health != null:
+				health.take_damage(4)
+			elif body.has_method("take_damage"):
+				body.take_damage(4)
+
+func _on_body_exited(body: Node2D) -> void:
+	if body.has_meta("pre_wire_speed"):
+		body.set("move_speed", float(body.get_meta("pre_wire_speed")))
+		body.remove_meta("pre_wire_speed")
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\components\CoverZone.gd ===
+
+extends Area2D
+
+@export var damage_reduction: float = 0.4
+
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+	body_exited.connect(_on_body_exited)
+
+func _on_body_entered(body: Node2D) -> void:
+	var health: HealthComponent = body.get_node_or_null("HealthComponent")
+	if health != null:
+		health.cover_count = maxi(0, health.cover_count + 1)
+
+func _on_body_exited(body: Node2D) -> void:
+	var health: HealthComponent = body.get_node_or_null("HealthComponent")
+	if health != null:
+		health.cover_count = maxi(0, health.cover_count - 1)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\components\ExplosiveProp.gd ===
+
+class_name ExplosiveProp
+extends StaticBody2D
+
+
+@export var explosion_radius: float = 200.0
+@export var explosion_damage: int = 100
+@export var hp: int = 50
+
+var exploded: bool = false
+
+func _ready() -> void:
+	add_to_group("explosives")
+	var cs := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 12.0
+	cs.shape = circle
+	add_child(cs)
+
+	var rect := ColorRect.new()
+	rect.size = Vector2(20.0, 20.0)
+	rect.position = Vector2(-10.0, -10.0)
+	rect.color = Color(0.85, 0.15, 0.1, 1.0)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(rect)
+
+	var health = HealthComponent.new()
+	health.name = "HealthComponent"
+	health.max_hp = hp
+	health.current_hp = hp
+	add_child(health)
+	health.died.connect(_on_health_died)
+
+
+func take_damage(amount: int) -> void:
+	var health: HealthComponent = get_node_or_null("HealthComponent")
+	if health:
+		health.take_damage(amount)
+
+func _on_health_died(_soldier: Node2D) -> void:
+	if not exploded:
+		_explode()
+
+func _explode() -> void:
+	exploded = true
+	var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
+	if cam != null and cam.has_method("shake"):
+		cam.call("shake", 10.0, 0.3)
+	var targets: Array = []
+	for g in ["player_units", "enemy_units", "mutants"]:
+		targets.append_array(get_tree().get_nodes_in_group(g))
+	for body in targets:
+		if not is_instance_valid(body) or not (body is Node2D):
+			continue
+		var dist: float = global_position.distance_to((body as Node2D).global_position)
+		if dist > explosion_radius:
+			continue
+		var health: HealthComponent = (body as Node).get_node_or_null("HealthComponent") as HealthComponent
+		if body is VehicleUnit:
+			(body as VehicleUnit).take_damage(explosion_damage, true)
+		elif health != null:
+			health.take_damage(explosion_damage)
+		elif body.has_method("take_damage"):
+			body.take_damage(explosion_damage)
+	queue_free()
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\components\MoraleComponent.gd ===
+
+class_name MoraleComponent
+extends Node
+
+@export var max_morale: float = 100.0
+@export var panic_threshold: float = 30.0
+@export var suppression_threshold: float = 45.0
+@export var recovery_rate: float = 5.0
+@export var combat_timeout: float = 3.0
+
+var current_morale: float = 100.0
+var is_panicked: bool = false
+var is_suppressed: bool = false
+var cowardice_multiplier: float = 1.5
+
+var soldier: CharacterBody2D = null
+var health_component: HealthComponent = null
+var weapon_component: WeaponComponent = null
+
+var _base_move_speed: float = 0.0
+var _base_attack_cooldown: float = 0.0
+var _combat_timer: float = 0.0
+var _medic_recovery_bonus: float = 0.0
+
+var _bar_root: Node2D = null
+var _bar_bg: ColorRect = null
+var _bar_fg: ColorRect = null
+
+var _panic_retreat_timer: float = 0.0
+var _last_stand: bool = false
+var _cover_indicator: ColorRect = null
+var veterancy_component: VeterancyComponent = null
+@export var retreat_speed: float = 180.0
+
+func _ready() -> void:
+	if soldier == null:
+		soldier = get_parent() as CharacterBody2D
+	if health_component == null and soldier != null:
+		health_component = soldier.get_node_or_null("HealthComponent") as HealthComponent
+	if weapon_component == null and soldier != null:
+		weapon_component = soldier.get_node_or_null("WeaponComponent") as WeaponComponent
+	if soldier != null and _base_move_speed == 0.0:
+		_base_move_speed = soldier.move_speed
+	if weapon_component != null and _base_attack_cooldown == 0.0:
+		_base_attack_cooldown = weapon_component.attack_cooldown
+	if soldier != null:
+		veterancy_component = soldier.get_node_or_null("VeterancyComponent") as VeterancyComponent
+
+	current_morale = max_morale
+	_create_bar()
+	_apply_panic_effects()
+	_update_bar()
+
+func _process(delta: float) -> void:
+	if _combat_timer > 0.0:
+		_combat_timer = maxf(0.0, _combat_timer - delta)
+	else:
+		var rate: float = recovery_rate + _medic_recovery_bonus
+		current_morale = minf(max_morale, current_morale + rate * delta)
+		_update_panic_state()
+		is_suppressed = current_morale < suppression_threshold and current_morale >= panic_threshold
+
+	_update_last_stand()
+	_update_panic_retreat(delta)
+	_update_cover_indicator()
+
+	_apply_panic_effects()
+	_update_bar()
+
+func reduce_morale(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	var actual: float = amount * cowardice_multiplier
+	if health_component != null and health_component.in_cover:
+		actual *= 0.5
+	current_morale = clampf(current_morale - actual, 0.0, max_morale)
+	_combat_timer = combat_timeout
+	_update_panic_state()
+
+func set_medic_recovery_bonus(bonus: float) -> void:
+	_medic_recovery_bonus = bonus
+
+func _update_panic_state() -> void:
+	var should_panic: bool = current_morale < panic_threshold
+	if should_panic != is_panicked:
+		is_panicked = should_panic
+
+func _apply_panic_effects() -> void:
+	if soldier != null and is_instance_valid(soldier):
+		if _last_stand:
+			soldier.move_speed = _base_move_speed
+		elif is_suppressed:
+			soldier.move_speed = _base_move_speed * 0.7
+		elif is_panicked:
+			soldier.move_speed = _base_move_speed * 0.6
+		else:
+			soldier.move_speed = _base_move_speed
+	if weapon_component != null and is_instance_valid(weapon_component):
+		if _last_stand:
+			weapon_component.attack_cooldown = _base_attack_cooldown * 0.65
+		elif is_suppressed:
+			weapon_component.attack_cooldown = _base_attack_cooldown * 1.4
+		elif is_panicked:
+			weapon_component.attack_cooldown = _base_attack_cooldown * 2.0
+		else:
+			weapon_component.attack_cooldown = _base_attack_cooldown
+
+func _create_bar() -> void:
+	if soldier == null:
+		return
+	_bar_root = Node2D.new()
+	_bar_root.name = "MoraleBar"
+	_bar_root.position = Vector2(-12.0, -22.0)
+	soldier.add_child(_bar_root)
+
+	_bar_bg = ColorRect.new()
+	_bar_bg.size = Vector2(24.0, 4.0)
+	_bar_bg.color = Color(0.15, 0.15, 0.15, 0.85)
+	_bar_root.add_child(_bar_bg)
+
+	_bar_fg = ColorRect.new()
+	_bar_fg.size = Vector2(24.0, 4.0)
+	_bar_fg.color = Color.GREEN
+	_bar_root.add_child(_bar_fg)
+
+func _update_bar() -> void:
+	if _bar_fg == null:
+		return
+	var ratio: float = 0.0
+	if max_morale > 0.0:
+		ratio = clampf(current_morale / max_morale, 0.0, 1.0)
+	_bar_fg.size.x = 24.0 * ratio
+	_update_bar_color()
+
+func _update_bar_color() -> void:
+	if _bar_fg == null:
+		return
+	if is_panicked:
+		_bar_fg.color = Color.RED
+	elif current_morale < 50.0:
+		_bar_fg.color = Color.YELLOW
+	else:
+		_bar_fg.color = Color.GREEN
+
+func _update_last_stand() -> void:
+	if soldier == null or not is_instance_valid(soldier):
+		return
+	if veterancy_component == null:
+		veterancy_component = soldier.get_node_or_null("VeterancyComponent") as VeterancyComponent
+	var rank: int = veterancy_component.rank if veterancy_component != null else 0
+
+	var has_radio: bool = false
+	var squad: Node2D = soldier.get_parent() as Node2D
+	if squad != null:
+		var spec: SpecialistComponent = squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
+		if spec != null and spec.specialist_type == SpecialistComponent.Type.RADIO:
+			has_radio = true
+
+	var hp_low: bool = false
+	if health_component != null and health_component.max_hp > 0:
+		hp_low = float(health_component.current_hp) / float(health_component.max_hp) < 0.35
+
+	var should_last_stand: bool = (rank >= 1 or has_radio) and hp_low
+
+	if should_last_stand and not _last_stand:
+		_last_stand = true
+		is_panicked = false
+		var rect: ColorRect = soldier.get_node_or_null("ColorRect") as ColorRect
+		if rect != null:
+			rect.color = Color(1.0, 0.85, 0.2, 1.0)
+	elif not should_last_stand and _last_stand:
+		_last_stand = false
+		var rect: ColorRect = soldier.get_node_or_null("ColorRect") as ColorRect
+		if rect != null:
+			rect.color = Color(0.2, 0.9, 0.3, 1.0)
+
+func _update_panic_retreat(delta: float) -> void:
+	if soldier == null or not is_instance_valid(soldier):
+		return
+	if _last_stand:
+		return
+	if veterancy_component == null:
+		veterancy_component = soldier.get_node_or_null("VeterancyComponent") as VeterancyComponent
+	var rank: int = veterancy_component.rank if veterancy_component != null else 0
+
+	if current_morale < panic_threshold and rank == 0:
+		_panic_retreat_timer += delta
+		if _panic_retreat_timer >= 1.5:
+			_panic_retreat_timer = 0.0
+			if current_morale < 45.0:
+				var retreat_pos: Vector2 = soldier.global_position
+				var nearest: Node2D = null
+				var nearest_dist: float = 1e6
+				var enemy_groups: Array[String] = []
+				if soldier.is_in_group("player_units"):
+					enemy_groups = ["enemy_units", "enemy_vehicles", "mutants"]
+				else:
+					enemy_groups = ["player_units", "player_vehicles"]
+				for g in enemy_groups:
+					for node in get_tree().get_nodes_in_group(g):
+						if not is_instance_valid(node) or not (node is Node2D):
+							continue
+						var dist: float = soldier.global_position.distance_to((node as Node2D).global_position)
+						if dist < nearest_dist:
+							nearest_dist = dist
+							nearest = node as Node2D
+				if nearest != null:
+					var dir: Vector2 = (soldier.global_position - nearest.global_position).normalized()
+					retreat_pos = soldier.global_position + dir * 120.0
+				retreat_pos.x = clampf(retreat_pos.x, 60.0, 1860.0)
+				retreat_pos.y = clampf(retreat_pos.y, 60.0, 1020.0)
+				soldier.set_destination(retreat_pos)
+
+func _update_cover_indicator() -> void:
+	if soldier == null or not is_instance_valid(soldier):
+		return
+	var health: HealthComponent = soldier.get_node_or_null("HealthComponent") as HealthComponent
+	var cover: bool = health != null and health.in_cover
+
+	if cover and _cover_indicator == null:
+		_cover_indicator = ColorRect.new()
+		_cover_indicator.name = "CoverIndicator"
+		_cover_indicator.size = Vector2(6.0, 6.0)
+		_cover_indicator.position = Vector2(-3.0, -3.0)
+		_cover_indicator.color = Color.BLUE
+		_cover_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		soldier.add_child(_cover_indicator)
+	elif not cover and _cover_indicator != null:
+		_cover_indicator.queue_free()
+		_cover_indicator = null
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\components\SpecialistComponent.gd ===
+
+class_name SpecialistComponent
+extends Node
+
+enum Type { NONE = 0, MEDIC = 1, SAPPER = 2, RADIO = 3 }
+
+@export var specialist_type: int = Type.NONE
+
+var squad_controller: Node2D = null
+var _radio_applied: bool = false
+var _heal_accum: float = 0.0
+
+func _ready() -> void:
+	if squad_controller == null:
+		squad_controller = get_parent() as Node2D
+	if specialist_type == Type.RADIO:
+		_apply_radio_bonus()
+	if specialist_type != Type.NONE:
+		_attach_specialist_badge()
+	if specialist_type != Type.MEDIC:
+		_reset_medic_bonuses()
+
+func _attach_specialist_badge() -> void:
+	if squad_controller == null or not is_instance_valid(squad_controller):
+		return
+	var soldiers: Array = squad_controller.get("soldiers")
+	if soldiers == null or soldiers.is_empty():
+		return
+	var color: Color = Color.WHITE
+	match specialist_type:
+		Type.MEDIC:
+			color = Color(0.1, 1.0, 0.3, 1.0)
+		Type.SAPPER:
+			color = Color(1.0, 0.55, 0.0, 1.0)
+		Type.RADIO:
+			color = Color(0.0, 0.85, 1.0, 1.0)
+		_:
+			return
+	for s in soldiers:
+		var soldier: Node2D = s as Node2D
+		if soldier == null or not is_instance_valid(soldier):
+			continue
+		var old_badge: ColorRect = soldier.get_node_or_null("SpecialistBadge") as ColorRect
+		if old_badge != null:
+			old_badge.queue_free()
+		var badge := ColorRect.new()
+		badge.name = "SpecialistBadge"
+		badge.size = Vector2(8.0, 8.0)
+		badge.position = Vector2(-4.0, -18.0)
+		badge.color = color
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		soldier.add_child(badge)
+
+func _process(delta: float) -> void:
+	if squad_controller == null or not is_instance_valid(squad_controller):
+		return
+	var soldiers: Array = squad_controller.get("soldiers")
+	if soldiers == null:
+		return
+	if specialist_type == Type.MEDIC:
+		_process_medic(delta, soldiers)
+
+func _process_medic(delta: float, soldiers: Array) -> void:
+	_heal_accum += 4.0 * delta
+	var heal_tick: int = 0
+	while _heal_accum >= 1.0:
+		_heal_accum -= 1.0
+		heal_tick += 1
+	if heal_tick <= 0:
+		heal_tick = 0
+
+	for i in range(soldiers.size()):
+		var soldier: Node2D = soldiers[i] as Node2D
+		if soldier == null or not is_instance_valid(soldier):
+			continue
+		var health: HealthComponent = soldier.get_node_or_null("HealthComponent") as HealthComponent
+		var morale: MoraleComponent = soldier.get_node_or_null("MoraleComponent") as MoraleComponent
+
+		var has_nearby_ally: bool = false
+		for j in range(soldiers.size()):
+			if i == j:
+				continue
+			var other: Node2D = soldiers[j] as Node2D
+			if other != null and is_instance_valid(other):
+				if soldier.global_position.distance_to(other.global_position) <= 100.0:
+					has_nearby_ally = true
+					break
+
+		if has_nearby_ally:
+			if health != null and heal_tick > 0:
+				health.current_hp = mini(health.max_hp, health.current_hp + heal_tick)
+			if morale != null:
+				morale.set_medic_recovery_bonus(2.0)
+		else:
+			if morale != null:
+				morale.set_medic_recovery_bonus(0.0)
+
+func _apply_radio_bonus() -> void:
+	if _radio_applied:
+		return
+	if squad_controller == null:
+		return
+	var soldiers: Array = squad_controller.get("soldiers")
+	if soldiers == null:
+		return
+	for s in soldiers:
+		var soldier: Node2D = s as Node2D
+		if soldier == null or not is_instance_valid(soldier):
+			continue
+		var weapon: WeaponComponent = soldier.get_node_or_null("WeaponComponent") as WeaponComponent
+		if weapon == null:
+			continue
+		if not weapon.has_meta("base_attack_range"):
+			weapon.set_meta("base_attack_range", weapon.attack_range)
+		var base_range: float = float(weapon.get_meta("base_attack_range"))
+		weapon.attack_range = base_range * 1.25
+		var detection: Area2D = weapon.get_node_or_null("DetectionArea") as Area2D
+		if detection != null and detection.get_child_count() > 0:
+			var shape_node: Node = detection.get_child(0)
+			if shape_node is CollisionShape2D:
+				var circle: CircleShape2D = (shape_node as CollisionShape2D).shape as CircleShape2D
+				if circle != null:
+					circle.radius = weapon.attack_range
+	_radio_applied = true
+
+func _reset_medic_bonuses() -> void:
+	if squad_controller == null:
+		return
+	var soldiers: Array = squad_controller.get("soldiers")
+	if soldiers == null:
+		return
+	for s in soldiers:
+		var soldier: Node2D = s as Node2D
+		if soldier == null or not is_instance_valid(soldier):
+			continue
+		var morale: MoraleComponent = soldier.get_node_or_null("MoraleComponent") as MoraleComponent
+		if morale != null:
+			morale.set_medic_recovery_bonus(0.0)
+
+func disarm_anomaly(anomaly: Node) -> bool:
+	if specialist_type != Type.SAPPER:
+		return false
+	if anomaly != null and is_instance_valid(anomaly):
+		anomaly.queue_free()
+		return true
+	return false
+
+func place_mine(position: Vector2) -> Node2D:
+	if specialist_type != Type.SAPPER:
+		return null
+	var mine: Area2D = Area2D.new()
+	mine.name = "Mine"
+
+	var rect := ColorRect.new()
+	rect.size = Vector2(8.0, 8.0)
+	rect.position = Vector2(-4.0, -4.0)
+	rect.color = Color(0.8, 0.4, 0.1, 1.0)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mine.add_child(rect)
+
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 8.0
+	shape.shape = circle
+	mine.add_child(shape)
+
+	mine.global_position = position
+	mine.body_entered.connect(_on_mine_body_entered.bind(mine))
+
+	var tree: SceneTree = get_tree()
+	if tree != null and tree.current_scene != null:
+		tree.current_scene.add_child(mine)
+	else:
+		add_child(mine)
+	return mine
+
+func _on_mine_body_entered(body: Node2D, mine: Area2D) -> void:
+	if not is_instance_valid(mine):
+		return
+	var groups: Array = body.get_groups()
+	if "enemy_units" not in groups and "enemy_vehicles" not in groups:
+		return
+	var mine_pos: Vector2 = mine.global_position
+	var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
+	if cam != null and cam.has_method("shake"):
+		cam.call("shake", 10.0, 0.3)
+	var damage: int = 120
+	var radius: float = 70.0
+
+	var enemies: Array = get_tree().get_nodes_in_group("enemy_units")
+	enemies.append_array(get_tree().get_nodes_in_group("enemy_vehicles"))
+	var hit_targets: Array[Node] = []
+	for obj in enemies:
+		if obj not in hit_targets:
+			hit_targets.append(obj)
+	for enemy in hit_targets:
+		if is_instance_valid(enemy) and enemy is Node2D:
+			if mine_pos.distance_to(enemy.global_position) <= radius:
+				var health: HealthComponent = enemy.get_node_or_null("HealthComponent") as HealthComponent
+				if health != null:
+					health.take_damage(damage)
+				elif enemy.has_method("take_damage"):
+					enemy.take_damage(damage)
+	mine.queue_free()
+
+func build_fortification(pos: Vector2, fort_type: int, rot: float = 0.0) -> void:
+	if specialist_type != Type.SAPPER:
+		return
+	var fort := FieldFortification.new()
+	fort.fort_type = fort_type
+	fort.rotation = rot
+	get_tree().current_scene.add_child(fort)
+	fort.global_position = pos
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\components\VeterancyComponent.gd ===
+
+class_name VeterancyComponent
+extends Node
+
+enum Rank { ROOKIE = 0, VETERAN = 1, ELITE = 2 }
+
+@export var rank: int = Rank.ROOKIE
+var xp: int = 0
+
+const XP_VETERAN: int = 100
+const XP_ELITE: int = 300
+
+var soldier: CharacterBody2D = null
+var health_component: HealthComponent = null
+var weapon_component: WeaponComponent = null
+var morale_component: MoraleComponent = null
+
+var _base_max_hp: int = 0
+var _base_attack_damage: int = 0
+
+# XP Bar
+var xp_bar: Node2D = null
+var xp_bar_bg: ColorRect = null
+var xp_bar_fill: ColorRect = null
+
+func _ready() -> void:
+	if soldier == null:
+		soldier = get_parent() as CharacterBody2D
+	if health_component == null and soldier != null:
+		health_component = soldier.get_node_or_null("HealthComponent") as HealthComponent
+	if weapon_component == null and soldier != null:
+		weapon_component = soldier.get_node_or_null("WeaponComponent") as WeaponComponent
+	if morale_component == null and soldier != null:
+		morale_component = soldier.get_node_or_null("MoraleComponent") as MoraleComponent
+
+	if health_component != null:
+		_base_max_hp = health_component.max_hp
+	if weapon_component != null:
+		_base_attack_damage = weapon_component.attack_damage
+
+	_apply_rank_bonuses()
+	_create_xp_bar()
+
+func _create_xp_bar() -> void:
+	# РЎРѕР·РґР°С‘Рј С€РєР°Р»Сѓ РѕРїС‹С‚Р° РЅР°Рґ Р±РѕР№С†РѕРј (СЂРµР±С‘РЅРѕРє СЂРѕРґРёС‚РµР»СЏ вЂ” СЃРѕР»РґР°С‚Р°)
+	if soldier == null or xp_bar != null:
+		return
+	xp_bar = Node2D.new()
+	xp_bar.name = "XPBar"
+	xp_bar.position = Vector2(-12.0, -17.0)
+	xp_bar.z_index = 10
+	xp_bar_bg = ColorRect.new()
+	xp_bar_bg.size = Vector2(24.0, 3.0)
+	xp_bar_bg.color = Color(0.15, 0.15, 0.2, 0.8)
+	xp_bar.add_child(xp_bar_bg)
+	xp_bar_fill = ColorRect.new()
+	xp_bar_fill.size = Vector2(0.0, 3.0)
+	xp_bar_fill.color = Color(0.2, 0.75, 1.0)
+	xp_bar.add_child(xp_bar_fill)
+	soldier.add_child(xp_bar)
+	_update_xp_bar_visual()
+
+func add_xp(amount: int) -> void:
+	if amount <= 0:
+		return
+	xp += amount
+	var new_rank: int = rank
+	if xp >= XP_ELITE:
+		new_rank = Rank.ELITE
+	elif xp >= XP_VETERAN:
+		new_rank = Rank.VETERAN
+	if new_rank > rank:
+		rank = new_rank
+		_apply_rank_bonuses()
+	_update_xp_bar_visual()
+
+func get_rank_name() -> String:
+	match rank:
+		Rank.VETERAN:
+			return "Veteran"
+		Rank.ELITE:
+			return "Elite"
+		_:
+			return "Rookie"
+
+func _hp_multiplier() -> float:
+	match rank:
+		Rank.VETERAN:
+			return 1.25
+		Rank.ELITE:
+			return 1.5
+		_:
+			return 1.0
+
+func _damage_multiplier() -> float:
+	match rank:
+		Rank.VETERAN:
+			return 1.25
+		Rank.ELITE:
+			return 1.5
+		_:
+			return 1.0
+
+func _cowardice_for_rank() -> float:
+	match rank:
+		Rank.VETERAN:
+			return 1.0
+		Rank.ELITE:
+			return 0.6
+		_:
+			return 1.5
+
+func _update_xp_bar_visual() -> void:
+	if xp_bar_fill == null:
+		return
+	if rank == Rank.ELITE:
+		xp_bar_fill.size = Vector2(24.0, 3.0)
+		xp_bar_fill.color = Color(1.0, 0.85, 0.2)  # Р·РѕР»РѕС‚Рѕ
+	elif rank == Rank.VETERAN:
+		# РџСЂРѕРіСЂРµСЃСЃ РѕС‚ 100 РґРѕ 300 XP (Р·РѕР»РѕС‚Рѕ)
+		var p: float = float(xp - XP_VETERAN) / float(XP_ELITE - XP_VETERAN)
+		xp_bar_fill.size = Vector2(clampf(p, 0.0, 1.0) * 24.0, 3.0)
+		xp_bar_fill.color = Color(1.0, 0.85, 0.2)  # Р·РѕР»РѕС‚Рѕ
+	else:
+		# РџСЂРѕРіСЂРµСЃСЃ РѕС‚ 0 РґРѕ 100 XP (СЃРёРЅРёР№)
+		var p: float = float(xp) / float(XP_VETERAN)
+		xp_bar_fill.size = Vector2(clampf(p, 0.0, 1.0) * 24.0, 3.0)
+		xp_bar_fill.color = Color(0.2, 0.75, 1.0)  # СЃРёРЅРёР№
+
+func _apply_rank_bonuses() -> void:
+	if health_component != null and is_instance_valid(health_component):
+		var new_max: int = int(round(_base_max_hp * _hp_multiplier()))
+		var delta: int = new_max - health_component.max_hp
+		health_component.max_hp = new_max
+		health_component.current_hp = clampi(health_component.current_hp + delta, 0, new_max)
+	if weapon_component != null and is_instance_valid(weapon_component):
+		weapon_component.attack_damage = int(round(_base_attack_damage * _damage_multiplier()))
+	if morale_component != null and is_instance_valid(morale_component):
+		morale_component.cowardice_multiplier = _cowardice_for_rank()
+	if rank == Rank.VETERAN:
+		var parent_soldier: Node = get_parent()
+		if parent_soldier != null and bool(parent_soldier.get("flashlight_on")):
+			parent_soldier.set("flashlight_on", false)
+	_update_xp_bar_visual()
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\EconomyManager.gd ===
+
+class_name EconomyManager
+extends Node
+
+@export var starting_sp: int = 200
+@export var passive_sp_per_sec: float = 2.0
+@export var capture_point_income: float = 5.0
+
+var _sp: int = 200
+var _sp_generation_timer: float = 0.0
+
+signal sp_changed(new_amount: int)
+
+func _ready() -> void:
+	add_to_group("economy")
+	_sp = starting_sp
+	_sp_generation_timer = 0.0
+	emit_sp_changed()
+
+func _process(delta: float) -> void:
+	_sp_generation_timer += delta
+	while _sp_generation_timer >= 1.0:
+		_sp_generation_timer -= 1.0
+		_sp += int(passive_sp_per_sec)
+		emit_sp_changed()
+
+func spend_sp(amount: int) -> bool:
+	if _sp >= amount:
+		_sp -= amount
+		emit_sp_changed()
+		return true
+	return false
+
+func add_sp(amount: int) -> void:
+	_sp += amount
+	emit_sp_changed()
+
+func get_sp() -> int:
+	return _sp
+
+func emit_sp_changed() -> void:
+	sp_changed.emit(_sp)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\FogDrawer.gd ===
+
+class_name FogDrawer
+extends Node2D
+
+var sources: Array = []
+var is_night: bool = false
+
+func update_night_alpha(enabled: bool) -> void:
+	is_night = enabled
+
+func _draw() -> void:
+	for src in sources:
+		var pos: Vector2 = (src["pos"] as Vector2) / 4.0
+		var radius: float = float(src["radius"]) / 4.0
+		if bool(src["cone"]):
+			var dir: Vector2 = src["dir"] as Vector2
+			var base_ang: float = dir.angle()
+			var half_rad: float = deg_to_rad(float(src["half_deg"]))
+			var pts := PackedVector2Array([
+				pos,
+				pos + Vector2(radius, 0.0).rotated(base_ang - half_rad),
+				pos + Vector2(radius, 0.0).rotated(base_ang + half_rad)
+			])
+			draw_colored_polygon(pts, Color(1.0, 1.0, 1.0, 1.0))
+		else:
+			draw_circle(pos, radius, Color(1.0, 1.0, 1.0, 1.0))
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\FogOfWarManager.gd ===
+
+class_name FogOfWarManager
+extends Node2D
+
+const SUB_W: int = 640
+const SUB_H: int = 360
+const SCALE: float = 4.0
+
+var is_night: bool = false
+var _rect: TextureRect
+var _flares: Array = []
+var _time: float = 0.0
+var _night_synced: bool = false
+var _update_timer: float = 0.0
+var _sub_viewport: SubViewport
+var _fog_drawer: Node2D
+var _fog_base: ColorRect
+
+func _ready() -> void:
+	z_index = 50
+	add_to_group("fog_of_war")
+
+	_sub_viewport = SubViewport.new()
+	_sub_viewport.size = Vector2(SUB_W, SUB_H)
+	_sub_viewport.transparent_bg = true
+	_sub_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_sub_viewport)
+
+	_fog_base = ColorRect.new()
+	_fog_base.name = "FogBase"
+	_fog_base.size = Vector2(SUB_W, SUB_H)
+	_fog_base.color = Color(0, 0, 0, 0.45)
+	_sub_viewport.add_child(_fog_base)
+
+	_fog_drawer = Node2D.new()
+	_fog_drawer.name = "FogDrawer"
+	_fog_drawer.set_script(preload("res://scripts/core/FogDrawer.gd"))
+	var mat := CanvasItemMaterial.new()
+	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_SUB
+	_fog_drawer.material = mat
+	_sub_viewport.add_child(_fog_drawer)
+
+	_rect = TextureRect.new()
+	_rect.name = "FogRect"
+	_rect.size = Vector2(SUB_W, SUB_H)
+	_rect.scale = Vector2(SCALE, SCALE)
+	_rect.texture = _sub_viewport.get_texture()
+	_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_rect)
+	_try_sync_night()
+
+func _try_sync_night() -> void:
+	if _night_synced:
+		return
+	var hud: GameHUD = get_parent().get_node_or_null("GameHUD") as GameHUD
+	if hud != null:
+		is_night = hud._is_night
+		_night_synced = true
+	else:
+		call_deferred("_try_sync_night")
+
+func set_night(enabled: bool) -> void:
+	is_night = enabled
+	if _fog_base != null:
+		_fog_base.color = Color(0, 0, 0, 0.90 if enabled else 0.45)
+	if _fog_drawer != null:
+		_fog_drawer.update_night_alpha(enabled)
+		_fog_drawer.queue_redraw()
+
+func add_flare(pos: Vector2, radius: float = 420.0, duration: float = 15.0) -> void:
+	var node := _make_flare_visual(pos, radius)
+	get_parent().add_child(node)
+	var expire: float = Time.get_ticks_msec() / 1000.0 + duration
+	_flares.append({"pos": pos, "radius": radius, "expire": expire, "duration": duration, "node": node})
+
+func _make_flare_visual(pos: Vector2, radius: float) -> Node2D:
+	var root := Node2D.new()
+	root.global_position = pos
+	var poly := Polygon2D.new()
+	var pts := PackedVector2Array()
+	for i in range(24):
+		var a: float = TAU * float(i) / 24.0
+		pts.append(Vector2(cos(a), sin(a)) * radius)
+	poly.polygon = pts
+	poly.color = Color(1.0, 0.9, 0.5, 0.35)
+	root.add_child(poly)
+	return root
+
+func _process(delta: float) -> void:
+	_time += delta
+	var now: float = Time.get_ticks_msec() / 1000.0
+	for i in range(_flares.size() - 1, -1, -1):
+		var f: Dictionary = _flares[i]
+		var remaining: float = float(f["expire"]) - now
+		if remaining <= 0.0:
+			var n: Node = f["node"] as Node
+			if is_instance_valid(n):
+				n.queue_free()
+			_flares.remove_at(i)
+			continue
+		var node: Node2D = f["node"] as Node2D
+		if is_instance_valid(node):
+			var dur: float = float(f["duration"])
+			var base_a: float = clampf(remaining / dur, 0.0, 1.0) * 0.4
+			var pulse: float = 0.8 + 0.2 * sin(_time * 4.0)
+			node.modulate.a = base_a * pulse
+	_update_timer += delta
+	if _update_timer >= 0.1:
+		_update_timer = 0.0
+		_update_fog()
+
+func _collect_sources() -> Array:
+	var tree: SceneTree = get_tree()
+	if tree == null:
+		return []
+	var sources: Array = []
+	for squad in tree.get_nodes_in_group("player_squads"):
+		if not is_instance_valid(squad):
+			continue
+		var soldiers: Array = squad.get("soldiers")
+		if soldiers == null:
+			continue
+		for s in soldiers:
+			if not is_instance_valid(s):
+				continue
+			var rank: int = 0
+			var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+			if vc != null:
+				rank = vc.rank
+			var has_nvg: bool = bool(s.get("has_nvg"))
+			var flashlight_on: bool = bool(s.get("flashlight_on"))
+			var thermal: bool = false
+			var r: float = 450.0  # РґРµРЅСЊ
+			if is_night:
+				if rank == VeterancyComponent.Rank.ROOKIE and not has_nvg:
+					r = 110.0  # РЅРѕРІРёС‡РѕРє Р±РµР· РџРќР’ 
+				elif has_nvg:
+					r = 290.0  # РџРќР’ вЂ” РЅРµ С‚РµРїР»РѕРІРёР·РѕСЂ
+					thermal = false
+				elif rank == VeterancyComponent.Rank.VETERAN:
+					r = 380.0  # РІРµС‚РµСЂР°РЅ вЂ” С‚РµРїР»РѕРІРёР·РѕСЂ
+					thermal = true
+				elif rank == VeterancyComponent.Rank.ELITE:
+					r = 430.0  # СЌР»РёС‚Р° вЂ” С‚РµРїР»РѕРІРёР·РѕСЂ
+					thermal = true
+			sources.append({"pos": s.global_position, "radius": r, "thermal": thermal, "cone": false, "dir": Vector2.ZERO})
+			if is_night and rank == VeterancyComponent.Rank.ROOKIE and not has_nvg and flashlight_on:
+				var raw_dir: Variant = s.get("_last_facing")
+				var dir: Vector2 = Vector2.RIGHT
+				if raw_dir is Vector2 and (raw_dir as Vector2).length() > 0.01:
+					dir = (raw_dir as Vector2).normalized()
+				sources.append({"pos": s.global_position, "radius": 320.0, "thermal": false, "cone": true, "dir": dir, "half_deg": 25.0})
+	for v in get_tree().get_nodes_in_group("player_vehicles"):
+		if is_instance_valid(v) and v is Node2D:
+			sources.append({"pos": (v as Node2D).global_position, "radius": 450.0, "thermal": true, "cone": false, "dir": Vector2.ZERO})
+	for d in get_tree().get_nodes_in_group("player_drones"):
+		if is_instance_valid(d) and d is Node2D:
+			sources.append({"pos": (d as Node2D).global_position, "radius": 450.0, "thermal": true, "cone": false, "dir": Vector2.ZERO})
+	for cp in get_tree().get_nodes_in_group("control_points"):
+		if is_instance_valid(cp) and cp is Node2D:
+			var owner_val: int = int(cp.get("point_owner"))
+			if owner_val == ControlPoint.Owner.PLAYER:
+				sources.append({"pos": (cp as Node2D).global_position, "radius": 250.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
+	for t in get_tree().get_nodes_in_group("player_turrets"):
+		if is_instance_valid(t) and t is Node2D:
+			sources.append({"pos": (t as Node2D).global_position, "radius": 340.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
+	for cf in get_tree().get_nodes_in_group("campfires"):
+		if is_instance_valid(cf) and cf is Node2D:
+			var cf_pos: Vector2 = (cf as Node2D).global_position
+			var ally_near: bool = false
+			for s in sources:
+				if cf_pos.distance_to(s["pos"] as Vector2) <= 320.0:
+					ally_near = true
+					break
+			if ally_near:
+				sources.append({"pos": cf_pos, "radius": 140.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
+	for f in _flares:
+		sources.append({"pos": f["pos"], "radius": float(f["radius"]), "thermal": false, "cone": false, "dir": Vector2.ZERO})
+	return sources
+
+func _update_fog() -> void:
+	var sources: Array = _collect_sources()
+	_fog_drawer.sources = sources
+	_fog_drawer.update_night_alpha(is_night)
+	_fog_drawer.queue_redraw()
+	_update_visibility(sources)
+
+func _source_sees(src: Dictionary, pos: Vector2) -> bool:
+	var radius: float = float(src["radius"])
+	var dist: float = pos.distance_to(src["pos"])
+	if bool(src["cone"]):
+		if dist <= radius:
+			var dir: Vector2 = src["dir"]
+			var ang: float = abs(dir.angle_to(pos - src["pos"]))
+			return ang <= deg_to_rad(float(src["half_deg"]))
+		return false
+	return dist <= radius
+
+func _is_visible(pos: Vector2, sources: Array, thermal_only: bool = false) -> bool:
+	for src in sources:
+		if thermal_only and not bool(src["thermal"]):
+			continue
+		if _source_sees(src, pos):
+			return true
+	return false
+
+func _update_visibility(sources: Array) -> void:
+	var tree: SceneTree = get_tree()
+	if tree == null:
+		return
+	var enemy_groups: Array[String] = ["enemy_units", "enemy_vehicles", "enemy_drones", "mutants"]
+	for g in enemy_groups:
+		for node in tree.get_nodes_in_group(g):
+			if not is_instance_valid(node) or not (node is Node2D):
+				continue
+			var vis: bool = _is_visible((node as Node2D).global_position, sources)
+			(node as Node).visible = vis
+			if is_night and vis and _is_visible((node as Node2D).global_position, sources, true):
+				(node as CanvasItem).modulate = Color(1.0, 0.55, 0.2, 1.0)
+			elif not is_night:
+				(node as CanvasItem).modulate = Color.WHITE
+	for g in ["anomaly_zones", "artifact_pickups"]:
+		for node in tree.get_nodes_in_group(g):
+			if not is_instance_valid(node) or not (node is Node2D):
+				continue
+			(node as Node).visible = _is_visible((node as Node2D).global_position, sources)
+	for g in ["loot_crates"]:
+		for node in tree.get_nodes_in_group(g):
+			if not is_instance_valid(node) or not (node is Node2D):
+				continue
+			(node as Node).visible = _is_visible((node as Node2D).global_position, sources)
+
+func _exit_tree() -> void:
+	_restore_all_visibility()
+
+func _restore_all_visibility() -> void:
+	var tree: SceneTree = get_tree()
+	if tree == null:
+		return
+	var groups: Array[String] = ["enemy_units", "enemy_vehicles", "enemy_drones", "mutants", "anomaly_zones", "artifact_pickups", "loot_crates"]
+	for g in groups:
+		for node in tree.get_nodes_in_group(g):
+			if is_instance_valid(node):
+				node.visible = true
+				if node is CanvasItem:
+					(node as CanvasItem).modulate = Color.WHITE
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\GameConfig.gd ===
+
+class_name GameConfig
+extends RefCounted
+
+const MAP_WIDTH: float = 2560.0
+const MAP_HEIGHT: float = 1440.0
+const SPAWN_MARGIN: float = 60.0
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\HealthComponent.gd ===
+
+class_name HealthComponent
+extends Node
+
+@export var max_hp: int = 100
+@export var cover_damage_reduction: float = 0.4
+
+var current_hp: int
+var cover_count: int = 0
+var in_cover: bool:
+	get:
+		return cover_count > 0
+
+signal died(soldier: Node2D)
+
+func _ready() -> void:
+	current_hp = max_hp
+
+func take_damage(amount: int) -> void:
+	var actual_damage: int = amount
+	if in_cover:
+		actual_damage = int(amount * (1.0 - cover_damage_reduction))
+	current_hp -= actual_damage
+
+	# Hit Flash: РїРѕРґСЃРІРµС‚РёС‚СЊ РґРѕС‡РµСЂРЅРёР№ ColorRect РёР»Рё СЃР°РјРѕРіРѕ СЂРѕРґРёС‚РµР»СЏ
+	var parent_node: Node = get_parent()
+	var flash_target: CanvasItem = null
+	if parent_node != null:
+		var rect_child: ColorRect = parent_node.get_node_or_null("ColorRect") as ColorRect
+		if rect_child != null:
+			flash_target = rect_child
+		elif parent_node is CanvasItem:
+			flash_target = parent_node as CanvasItem
+	if flash_target != null and is_instance_valid(flash_target):
+		flash_target.modulate = Color(2.5, 2.5, 2.5, 1.0)
+		var hit_tween := flash_target.create_tween()
+		hit_tween.tween_property(flash_target, "modulate", Color.WHITE, 0.08)
+
+	# РџР»Р°РІР°СЋС‰РёРµ С†РёС„СЂС‹ СѓСЂРѕРЅР°
+	if get_tree() != null and get_tree().current_scene != null and parent_node is Node2D:
+		var dmg_label := Label.new()
+		dmg_label.text = "-" + str(actual_damage)
+		dmg_label.z_index = 60
+		dmg_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dmg_label.add_theme_font_size_override("font_size", 13)
+		if actual_damage >= 35:
+			dmg_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.15, 1.0))
+		else:
+			dmg_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.9, 1.0))
+		var parent_2d: Node2D = parent_node as Node2D
+		var start_pos: Vector2 = parent_2d.global_position - Vector2(12.0, 20.0)
+		dmg_label.position = start_pos
+		get_tree().current_scene.add_child(dmg_label)
+		var dmg_tween := dmg_label.create_tween()
+		dmg_tween.tween_property(dmg_label, "position", start_pos + Vector2(0.0, -24.0), 0.55)
+		dmg_tween.parallel().tween_property(dmg_label, "modulate:a", 0.0, 0.55)
+		dmg_tween.tween_callback(dmg_label.queue_free)
+
+	if get_parent() != null:
+		var morale: MoraleComponent = get_parent().get_node_or_null("MoraleComponent") as MoraleComponent
+		if morale != null:
+			morale.reduce_morale(float(amount))
+	# РЁРѕРє РѕС‚ РєСЂСѓРїРЅРѕРіРѕ СѓСЂРѕРЅР°: РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Р№ СѓСЂРѕРЅ РјРѕСЂР°Р»Рё
+	if actual_damage >= 25 and get_parent() != null:
+		var morale_shock: MoraleComponent = get_parent().get_node_or_null("MoraleComponent") as MoraleComponent
+		if morale_shock != null:
+			morale_shock.reduce_morale(10.0)
+	if current_hp <= 0:
+		current_hp = 0
+		died.emit(get_parent() as Node2D)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\MissionBuilder.gd ===
+
+class_name MissionBuilder
+extends RefCounted
+
+const _MUTANT_SPAWNER_SCRIPT := preload("res://scripts/ai/MutantWaveSpawner.gd")
+const _SQUAD_SCRIPT := preload("res://scripts/core/SquadController.gd")
+const _VEHICLE_SCRIPT := preload("res://scripts/units/VehicleUnit.gd")
+const _DRONE_SCRIPT := preload("res://scripts/units/DroneUnit.gd")
+const _CONTROL_POINT_SCRIPT := preload("res://scripts/buildings/ControlPoint.gd")
+
+static func _mm(parent: Node) -> MissionManager:
+	return parent.get_node_or_null("MissionManager") as MissionManager
+
+static func spawn_player_squad(parent: Node, pos: Vector2, count: int = 3) -> SquadController:
+	return _make_squad(parent, pos, false, count)
+
+static func spawn_enemy_squad(parent: Node, pos: Vector2, count: int = 3) -> SquadController:
+	return _make_squad(parent, pos, true, count)
+
+static func _make_squad(parent: Node, pos: Vector2, enemy: bool, count: int) -> SquadController:
+	var sq: SquadController = _SQUAD_SCRIPT.new()
+	sq.position = pos
+	if enemy:
+		sq.add_to_group("enemy_squads")
+	else:
+		sq.add_to_group("player_squads")
+	for i in range(count):
+		var s := Soldier.new()
+		s.name = "Soldier_" + str(i)
+		s.position = Vector2(i * 24 - 24, 0)
+		var nav := NavigationAgent2D.new()
+		nav.name = "NavigationAgent2D"
+		s.add_child(nav)
+		var cs := CollisionShape2D.new()
+		var circ := CircleShape2D.new()
+		circ.radius = 6.0
+		cs.shape = circ
+		s.add_child(cs)
+		var rect := ColorRect.new()
+		rect.size = Vector2(16, 16)
+		rect.position = Vector2(-8, -8)
+		rect.color = Color(0.8, 0.2, 0.2, 1) if enemy else Color(0.2, 0.9, 0.3, 1)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		s.add_child(rect)
+		if enemy:
+			s.add_to_group("enemy_units")
+		else:
+			s.add_to_group("player_units")
+		sq.add_child(s)
+	parent.call_deferred("add_child", sq)
+	return sq
+static func _make_vehicle(parent: Node, pos: Vector2, enemy: bool) -> VehicleUnit:
+	var v := VehicleUnit.new()
+	v.position = pos
+	v.is_enemy = enemy
+	parent.call_deferred("add_child", v)
+	return v
+
+static func _make_drone(parent: Node, pos: Vector2, dtype: int, enemy: bool) -> DroneUnit:
+	var d := DroneUnit.new()
+	d.position = pos
+	d.drone_type = dtype
+	d.is_enemy = enemy
+	parent.call_deferred("add_child", d)
+	return d
+
+static func _make_anomaly(parent: Node, pos: Vector2, atype: int, radius: float) -> AnomalyZone:
+	var a := AnomalyZone.new()
+	a.position = pos
+	a.anomaly_type = atype
+	a.radius = radius
+	parent.call_deferred("add_child", a)
+	return a
+
+static func _make_barrel(parent: Node, pos: Vector2) -> ExplosiveProp:
+	var b := ExplosiveProp.new()
+	b.position = pos
+	b.explosion_radius = 200.0
+	b.explosion_damage = 100
+	b.hp = 50
+	parent.call_deferred("add_child", b)
+	return b
+
+static func _make_artifact(parent: Node, pos: Vector2, btype: int) -> ArtifactPickup:
+	var a := ArtifactPickup.new()
+	a.position = pos
+	a.buff_type = btype
+	parent.call_deferred("add_child", a)
+	return a
+
+static func _make_control_point(parent: Node, pos: Vector2) -> ControlPoint:
+	var cp := ControlPoint.new()
+	cp.position = pos
+	cp.capture_radius = 80.0
+	cp.capture_time = 5.0
+	parent.call_deferred("add_child", cp)
+	return cp
+
+static func _make_base(parent: Node, pos: Vector2, hp: int) -> StaticBody2D:
+	var base := StaticBody2D.new()
+	base.name = "CorpsBase"
+	base.position = pos
+	base.add_to_group("enemy_units")
+	var cs := CollisionShape2D.new()
+	var rs := RectangleShape2D.new()
+	rs.size = Vector2(140, 140)
+	cs.shape = rs
+	base.add_child(cs)
+	var rect := ColorRect.new()
+	rect.size = Vector2(140, 140)
+	rect.position = Vector2(-70, -70)
+	rect.color = Color(0.8, 0.1, 0.1, 1.0)
+	base.add_child(rect)
+	var hc := HealthComponent.new()
+	hc.name = "HealthComponent"
+	hc.max_hp = hp
+	hc.current_hp = hp
+	base.add_child(hc)
+	var mm: MissionManager = parent.get_node_or_null("MissionManager") as MissionManager
+	if mm != null:
+		hc.died.connect(mm._on_base_destroyed)
+	parent.call_deferred("add_child", base)
+	return base
+
+static func build_mission_1(parent: Node) -> void:
+	var mm := _mm(parent)
+	if mm != null:
+		mm._set_objective("M1 [Corps]: Capture 3 control points and repel 2 mutant waves")
+	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
+	if hud != null:
+		hud.call_deferred("set_night", false)
+	spawn_player_squad(parent, Vector2(200, 400), 3)
+	_make_control_point(parent, Vector2(700, 350))
+	_make_control_point(parent, Vector2(1300, 720))
+	_make_control_point(parent, Vector2(1900, 1050))
+	var spawner := MutantWaveSpawner.new()
+	spawner.name = "MutantWaveSpawner"
+	spawner.max_waves = 2
+	spawner.wave_interval = 12.0
+	spawner.spawn_points = [Vector2(2350, 300), Vector2(2350, 1100)]
+	spawner.swarm_count = 5
+	spawner.brute_count = 1
+	parent.call_deferred("add_child", spawner)
+
+static func build_mission_2(parent: Node) -> Array[VehicleUnit]:
+	var mm := _mm(parent)
+	if mm != null:
+		mm._set_objective("M2 [Corps]: Escort 2 trucks to extraction zone on the right")
+	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
+	if hud != null:
+		hud.call_deferred("set_night", true)
+	var trucks: Array[VehicleUnit] = []
+	for i in range(2):
+		var truck: VehicleUnit = _make_vehicle(parent, Vector2(200 + i * 80, 540), false)
+		truck.move_speed = 80.0
+		var hc: HealthComponent = truck.get_node_or_null("HealthComponent") as HealthComponent
+		if hc != null:
+			hc.max_hp = 400
+			hc.current_hp = 400
+		trucks.append(truck)
+	spawn_player_squad(parent, Vector2(200, 400), 4)
+	_make_anomaly(parent, Vector2(600, 300), AnomalyZone.AnomalyType.VORTEX, 140.0)
+	_make_anomaly(parent, Vector2(950, 700), AnomalyZone.AnomalyType.VORTEX, 120.0)
+	_make_anomaly(parent, Vector2(1300, 400), AnomalyZone.AnomalyType.VORTEX, 150.0)
+	_make_barrel(parent, Vector2(550, 540))
+	_make_barrel(parent, Vector2(800, 600))
+	_make_barrel(parent, Vector2(1100, 500))
+	_make_barrel(parent, Vector2(1400, 550))
+	var extract := Area2D.new()
+	extract.name = "ExtractionZone"
+	extract.position = Vector2(2350, 720)
+	var cs := CollisionShape2D.new()
+	var rs := RectangleShape2D.new()
+	rs.size = Vector2(100, 300)
+	cs.shape = rs
+	extract.add_child(cs)
+	parent.call_deferred("add_child", extract)
+	var ai := SkirmishAI.new()
+	ai.name = "SkirmishAI"
+	ai.think_interval = 10.0
+	ai.starting_resources = 200
+	parent.call_deferred("add_child", ai)
+	return trucks
+
+
+static func build_mission_3(parent: Node) -> StaticBody2D:
+	var mm := _mm(parent)
+	if mm != null:
+		mm._set_objective("M3 [Syndicate]: Night raid - destroy Corps base")
+	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
+	if hud != null:
+		hud.call_deferred("set_night", true)
+	_make_drone(parent, Vector2(200, 400), DroneUnit.DroneType.FPV_KAMIKAZE, false)
+	_make_drone(parent, Vector2(240, 400), DroneUnit.DroneType.FPV_KAMIKAZE, false)
+	spawn_player_squad(parent, Vector2(200, 350), 3)
+	var base: StaticBody2D = _make_base(parent, Vector2(2100, 720), 1500)
+	spawn_enemy_squad(parent, Vector2(1350, 450), 3)
+	spawn_enemy_squad(parent, Vector2(1350, 650), 3)
+	var ai := SkirmishAI.new()
+	ai.name = "SkirmishAI"
+	ai.think_interval = 12.0
+	ai.starting_resources = 300
+	parent.call_deferred("add_child", ai)
+	return base
+
+static func build_mission_4(parent: Node) -> void:
+	var mm := _mm(parent)
+	if mm != null:
+		mm._set_objective("M4 [Syndicate]: Heart of the Rift - hold the artifact point for 180 sec")
+	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
+	if hud != null:
+		hud.call_deferred("set_night", false)
+	var cp: ControlPoint = _make_control_point(parent, Vector2(1280, 720))
+	cp.capture_time = 2.0
+	_make_artifact(parent, Vector2(1280, 720), ArtifactPickup.BuffType.HP)
+	spawn_player_squad(parent, Vector2(200, 400), 3)
+	var spawner := MutantWaveSpawner.new()
+	spawner.name = "MutantWaveSpawner"
+	spawner.max_waves = 999
+	spawner.wave_interval = 8.0
+	spawner.spawn_points = [Vector2(100, 100), Vector2(1820, 100), Vector2(100, 980), Vector2(1820, 980)]
+	spawner.swarm_count = 4
+	spawner.brute_count = 1
+	parent.call_deferred("add_child", spawner)
+	var ai := SkirmishAI.new()
+	ai.name = "SkirmishAI"
+	ai.think_interval = 12.0
+	ai.starting_resources = 400
+	parent.call_deferred("add_child", ai)
+
+static func build_sandbox(parent: Node) -> void:
+	var mm := _mm(parent)
+	if mm != null:
+		mm._set_objective("Sandbox: build an army and capture points")
+	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
+	if hud != null:
+		hud.call_deferred("set_night", false)
+	spawn_player_squad(parent, Vector2(200, 400), 3)
+	_make_control_point(parent, Vector2(600, 300))
+	_make_control_point(parent, Vector2(1300, 700))
+	var ai := SkirmishAI.new()
+	ai.name = "SkirmishAI"
+	ai.think_interval = 15.0
+	ai.starting_resources = 150
+	parent.call_deferred("add_child", ai)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\MissionManager.gd ===
+
+class_name MissionManager
+extends Node
+
+# Step 7: Mission Manager - menu selection, mission construction, win/loss control.
+# All missions, enemies, mutants and menus are built programmatically based on main_game.tscn.
+
+enum Mission { NONE, M1, M2, M3, M4, SANDBOX }
+
+@export var mission: Mission = Mission.NONE
+
+var _menu: CanvasLayer
+var _objective_label: Label
+var _finish_overlay: Node
+var _objective_text_override: String = ""
+
+var _mission_start_time: float = 0.0
+var _finished: bool = false
+var _base: StaticBody2D
+var _convoy_trucks: Array[VehicleUnit] = []
+
+const _BUILDER := preload("res://scripts/core/MissionBuilder.gd")
+
+func _ready() -> void:
+	_menu = _build_menu()
+	get_tree().root.add_child(_menu)
+
+# --- Mission Manager ---
+
+func _build_menu() -> CanvasLayer:
+	var menu := CanvasLayer.new()
+	menu.name = "MissionMenu"
+	var bg := ColorRect.new()
+	bg.color = Color(0.08, 0.09, 0.12, 1.0)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	menu.add_child(bg)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	menu.add_child(center)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	center.add_child(vbox)
+	var title := Label.new()
+	title.text = "EAST RIFT ZONE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 40)
+	vbox.add_child(title)
+	var subtitle := Label.new()
+	subtitle.text = "Mission Selection"
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 18)
+	vbox.add_child(subtitle)
+	var missions: Array = [
+[Mission.M1, "[Corps] Mission 1: Perimeter"],
+[Mission.M2, "[Corps] Mission 2: Convoy in the fog"],
+[Mission.M3, "[Syndicate] Mission 3: Night raid"],
+[Mission.M4, "[Syndicate] Mission 4: Heart of the Rift"],
+	]
+	for entry in missions:
+		var btn := Button.new()
+		btn.text = str(entry[1])
+		btn.custom_minimum_size = Vector2(460, 46)
+		btn.add_theme_font_size_override("font_size", 18)
+		btn.pressed.connect(_on_mission_selected.bind(int(entry[0])))
+		vbox.add_child(btn)
+	var sandbox_btn := Button.new()
+	sandbox_btn.text = "Sandbox / Skirmish"
+	sandbox_btn.custom_minimum_size = Vector2(460, 46)
+	sandbox_btn.add_theme_font_size_override("font_size", 18)
+	sandbox_btn.pressed.connect(_on_mission_selected.bind(Mission.SANDBOX))
+	vbox.add_child(sandbox_btn)
+	var quit_btn := Button.new()
+	quit_btn.text = "Quit"
+	quit_btn.custom_minimum_size = Vector2(460, 46)
+	quit_btn.pressed.connect(func() -> void: get_tree().quit())
+	vbox.add_child(quit_btn)
+	return menu
+
+func _on_mission_selected(m: int) -> void:
+	_close_menu()
+	await _start_mission(m)
+
+func _close_menu() -> void:
+	if is_instance_valid(_menu):
+		_menu.queue_free()
+		_menu = null
+# --- Mission launch ---
+
+func _start_mission(m: int) -> void:
+	_close_menu()
+	mission = m as Mission
+	await get_tree().process_frame
+	_clear_world()
+	await get_tree().process_frame
+	_build_base()
+	match m:
+		Mission.M1: _BUILDER.build_mission_1(get_parent())
+		Mission.M2: _convoy_trucks = _BUILDER.build_mission_2(get_parent())
+		Mission.M3: _base = _BUILDER.build_mission_3(get_parent())
+		Mission.M4: _BUILDER.build_mission_4(get_parent())
+		Mission.SANDBOX: _BUILDER.build_sandbox(get_parent())
+		_: pass
+	var env: Node2D = preload("res://scripts/environment/ZoneEnvironment.gd").new()
+	env.z_index = 0
+	get_parent().add_child(env)
+	var seed_val: int = int(m) * 1337 if m != Mission.SANDBOX else 0
+	env.generate_map(seed_val)
+	_mission_start_time = Time.get_ticks_msec() / 1000.0
+
+func _clear_world() -> void:
+	var keep: Array[String] = ["MissionManager", "SelectionManager", "Ground", "NavRegion", "GameCamera", "Main"]
+	var main: Node = get_parent()
+	if main != null:
+		for child in main.get_children():
+			if child.name not in keep:
+				child.queue_free()
+	for n in get_tree().get_nodes_in_group("mission_cleanup"):
+		if is_instance_valid(n):
+			n.queue_free()
+	var cm = get_tree().root.get_node_or_null("CanvasModulate")
+	if cm != null:
+		cm.queue_free()
+
+func _build_base() -> void:
+	var eco := EconomyManager.new()
+	eco.name = "EconomyManager"
+	get_parent().call_deferred("add_child", eco)
+	var hud := GameHUD.new()
+	hud.name = "GameHUD"
+	get_parent().call_deferred("add_child", hud)
+
+	var fog := FogOfWarManager.new()
+	fog.name = "FogOfWarManager"
+	get_parent().call_deferred("add_child", fog)
+	fog.add_to_group("fog_of_war")
+	_objective_label = Label.new()
+	_objective_label.name = "ObjectiveLabel"
+	_objective_label.position = Vector2(230, 15)
+	_objective_label.size = Vector2(400, 40)
+	_objective_label.add_theme_font_size_override("font_size", 20)
+	_objective_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_objective_label.modulate = Color.WHITE
+	hud.add_child(_objective_label)
+
+func _set_objective(text: String) -> void:
+	_objective_text_override = text
+	if is_instance_valid(_objective_label):
+		_objective_label.text = "OBJECTIVE: " + text
+
+func _on_base_destroyed(_node: Node2D) -> void:
+	if mission == Mission.M3:
+		_finish(true)
+
+func _finish(won: bool) -> void:
+	if _finished:
+		return
+	_finished = true
+	mission = Mission.NONE
+	_show_finish(won)
+
+func _show_finish(won: bool) -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "FinishOverlay"
+	var bg := ColorRect.new()
+	bg.color = Color(0.0, 0.0, 0.0, 0.85)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bg)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(center)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 16)
+	center.add_child(vbox)
+	var title := Label.new()
+	title.text = "VICTORY!" if won else "DEFEAT"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 48)
+	title.add_theme_color_override("font_color", Color(0.3, 1.0, 0.4) if won else Color(1.0, 0.3, 0.3))
+	vbox.add_child(title)
+	var btn := Button.new()
+	btn.text = "To mission selection"
+	btn.custom_minimum_size = Vector2(300, 50)
+	btn.add_theme_font_size_override("font_size", 20)
+	btn.pressed.connect(func() -> void: get_tree().reload_current_scene())
+	vbox.add_child(btn)
+	get_parent().add_child(layer)
+	_finish_overlay = layer
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\Projectile.gd ===
+
+extends Node2D
+
+@export var speed: float = 600.0
+@export var damage: int = 25
+@export var target_group: String = "enemy_units"
+@export var morale_penalty: int = 0
+
+var is_anti_tank: bool = false
+var target_position: Vector2 = Vector2.ZERO
+var active: bool = true
+var shooter: Node2D = null
+
+func setup(target: Vector2, projectile_speed: float, projectile_damage: int, projectile_target_group: String) -> void:
+	target_position = target
+	speed = projectile_speed
+	damage = projectile_damage
+	target_group = projectile_target_group
+
+func _process(delta: float) -> void:
+	if not active:
+		return
+	var old_pos: Vector2 = global_position
+	var dir: Vector2 = (target_position - global_position).normalized()
+	var new_pos: Vector2 = global_position + dir * speed * delta
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	if space != null:
+		var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(old_pos, new_pos)
+		if shooter != null and is_instance_valid(shooter):
+			query.exclude = [shooter]
+		var result: Dictionary = space.intersect_ray(query)
+		if not result.is_empty():
+			var collider: Object = result.get("collider")
+			if collider is StaticBody2D:
+				var sb: StaticBody2D = collider as StaticBody2D
+				var hc: HealthComponent = sb.get_node_or_null("HealthComponent") as HealthComponent
+				if sb is FieldFortification:
+					var ff: FieldFortification = sb as FieldFortification
+					if ff.fort_type == FieldFortification.FortType.SANDBAGS and hc != null:
+						if shooter != null and is_instance_valid(shooter) and shooter.global_position.distance_to(sb.global_position) <= 60.0:
+							pass
+						else:
+							hc.take_damage(damage)
+							active = false
+							queue_free()
+							return
+				if hc == null:
+					active = false
+					queue_free()
+					return
+				if not (sb is FieldFortification and (sb as FieldFortification).fort_type == FieldFortification.FortType.SANDBAGS):
+					hc.take_damage(damage)
+					active = false
+					queue_free()
+					return
+	global_position = new_pos
+	if global_position.distance_to(target_position) < 10.0:
+		_hit_target()
+		active = false
+
+func _hit_target() -> void:
+	var targets: Array = get_tree().get_nodes_in_group(target_group)
+	targets.append_array(get_tree().get_nodes_in_group("explosives"))
+	var final_damage: float = float(damage)
+	for obj in targets:
+		if is_instance_valid(obj) and global_position.distance_to(obj.global_position) < 24.0:
+			if obj is Soldier:
+				var facing_variant: Variant = obj.get("_last_facing")
+				if facing_variant is Vector2:
+					var facing: Vector2 = facing_variant as Vector2
+					var to_attacker: Vector2 = (global_position - obj.global_position).normalized()
+					var dot: float = facing.dot(to_attacker)
+					if dot < -0.5:
+						final_damage *= 1.5
+					elif dot < 0.2:
+						final_damage *= 1.25
+			var health: HealthComponent = obj.get_node_or_null("HealthComponent")
+			if health != null:
+				if obj is VehicleUnit:
+					(obj as VehicleUnit).take_damage(int(final_damage), is_anti_tank)
+				elif obj.has_method("take_damage"):
+					obj.take_damage(int(final_damage))
+				else:
+					health.take_damage(int(final_damage))
+			elif obj.has_method("take_damage"):
+				obj.take_damage(int(final_damage))
+			if morale_penalty > 0:
+				var morale: MoraleComponent = obj.get_node_or_null("MoraleComponent") as MoraleComponent
+				if morale != null:
+					morale.reduce_morale(float(morale_penalty))
+			_award_xp()
+			break
+	queue_free()
+
+func _award_xp() -> void:
+	if shooter == null or not is_instance_valid(shooter):
+		return
+	var squad: Node = shooter.get("squad_controller")
+	if squad != null and is_instance_valid(squad):
+		var soldiers: Array = squad.get("soldiers")
+		if soldiers != null:
+			for s in soldiers:
+				if is_instance_valid(s):
+					var s_vet: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+					if s_vet != null:
+						s_vet.add_xp(15)
+			return
+	var vet: VeterancyComponent = shooter.get_node_or_null("VeterancyComponent") as VeterancyComponent
+	if vet != null:
+		vet.add_xp(15)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\RTSCamera.gd ===
+
+class_name RTSCamera
+extends Camera2D
+
+const _CFG := preload("res://scripts/core/GameConfig.gd")
+
+@export var pan_speed: float = 300.0
+@export var zoom_speed: float = 0.1
+@export var min_zoom: float = 0.5
+@export var max_zoom: float = 2.0
+@export var edge_margin: float = 20.0
+
+var screen_size: Vector2
+
+func _ready() -> void:
+	screen_size = get_viewport_rect().size
+	# РћРіСЂР°РЅРёС‡РёРІР°РµРј РєР°РјРµСЂСѓ РІ РїСЂРµРґРµР»Р°С… РєР°СЂС‚С‹ 1920x1080
+	limit_left = 0
+	limit_top = 0
+	limit_right = int(_CFG.MAP_WIDTH)
+	limit_bottom = int(_CFG.MAP_HEIGHT)
+	add_to_group("rts_camera")
+
+func _process(delta: float) -> void:
+	screen_size = get_viewport_rect().size
+	var input_dir: Vector2 = Vector2.ZERO
+	
+	# WASD + СЃС‚СЂРµР»РѕС‡РєРё (РїСЂСЏРјР°СЏ РїСЂРѕРІРµСЂРєР° РєР»Р°РІРёС€, Р±РµР· InputMap)
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+		input_dir.x += 1.0
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+		input_dir.x -= 1.0
+	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+		input_dir.y += 1.0
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+		input_dir.y -= 1.0
+	
+	# Edge pan (screen-РєРѕРѕСЂРґРёРЅР°С‚С‹ РїРѕРґС…РѕРґСЏС‚ РґР»СЏ РѕРїСЂРµРґРµР»РµРЅРёСЏ РєСЂР°СЏ СЌРєСЂР°РЅР°)
+	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
+	if mouse_pos.x < edge_margin:
+		input_dir.x -= 1.0
+	elif mouse_pos.x > screen_size.x - edge_margin:
+		input_dir.x += 1.0
+	if mouse_pos.y < edge_margin:
+		input_dir.y -= 1.0
+	elif mouse_pos.y > screen_size.y - edge_margin:
+		input_dir.y += 1.0
+	
+	# РџРµСЂРµРјРµС‰РµРЅРёРµ РєР°РјРµСЂС‹
+	position += input_dir.normalized() * pan_speed * delta
+	# Р—Р°Р¶РёРјР°РµРј РІ РїСЂРµРґРµР»Р°С… РєР°СЂС‚С‹
+	position = position.clamp(Vector2.ZERO, Vector2(_CFG.MAP_WIDTH, _CFG.MAP_HEIGHT))
+
+func shake(intensity: float = 8.0, duration: float = 0.25) -> void:
+	var tween := create_tween()
+	tween.tween_property(self, "offset", Vector2(randf_range(-intensity, intensity), randf_range(-intensity, intensity)), duration * 0.33)
+	tween.tween_property(self, "offset", Vector2.ZERO, duration * 0.33)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			var new_zoom: float = clamp(zoom.x + zoom_speed, min_zoom, max_zoom)
+			zoom = Vector2(new_zoom, new_zoom)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			var new_zoom: float = clamp(zoom.x - zoom_speed, min_zoom, max_zoom)
+			zoom = Vector2(new_zoom, new_zoom)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\SelectionManager.gd ===
+
+extends Node2D
+
+@export var selection_color: Color = Color(0.0, 1.0, 0.0, 0.25)
+@export var border_color: Color = Color(0.0, 1.0, 0.0, 0.9)
+@export var highlight_color: Color = Color(1.0, 1.0, 0.0, 1.0)
+
+var is_selecting: bool = false
+var selection_start: Vector2 = Vector2.ZERO
+var selection_end: Vector2 = Vector2.ZERO
+var selected_units: Array[CharacterBody2D] = []
+var selected_squads: Array = []
+var control_groups: Dictionary = {}
+var attack_move_mode: bool = false
+
+signal selection_changed(selected_units: Array[CharacterBody2D], selected_squads: Array)
+
+func _ready() -> void:
+	z_index = 100
+
+	# Step 7: MissionManager вЂ” РјРµРЅСЋ РІС‹Р±РѕСЂР° РјРёСЃСЃРёР№ Рё СЃР±РѕСЂРєР° РјРёСЃСЃРёР№ (РїСЂРѕРіСЂР°РјРјРЅРѕ)
+	var mm := MissionManager.new()
+	mm.name = "MissionManager"
+	get_parent().call_deferred("add_child", mm)
+
+func _process(_delta: float) -> void:
+	if is_selecting:
+		selection_end = get_global_mouse_position()
+		queue_redraw()
+
+func _input(event: InputEvent) -> void:
+	if get_viewport().gui_get_hovered_control() != null:
+		return
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_Q:
+			attack_move_mode = true
+			_notify("Attack-move: click RMB")
+			get_viewport().set_input_as_handled()
+			return
+		elif event.keycode == KEY_H:
+			_issue_hold()
+			get_viewport().set_input_as_handled()
+			return
+		elif event.keycode == KEY_R:
+			_issue_retreat()
+			get_viewport().set_input_as_handled()
+			return
+		elif event.keycode >= KEY_1 and event.keycode <= KEY_9:
+			var group_id: int = event.keycode - KEY_1 + 1
+			if event.ctrl_pressed:
+				_assign_control_group(group_id)
+			else:
+				_select_control_group(group_id)
+			get_viewport().set_input_as_handled()
+			return
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			is_selecting = true
+			selection_start = get_global_mouse_position()
+			selection_end = selection_start
+			queue_redraw()
+		elif event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+			is_selecting = false
+			_select_units_in_box()
+			queue_redraw()
+		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			if attack_move_mode:
+				_issue_attack_move(get_global_mouse_position())
+				attack_move_mode = false
+			else:
+				_issue_move_command(get_global_mouse_position())
+
+func _draw() -> void:
+	if is_selecting:
+		var rect: Rect2 = Rect2(selection_start.min(selection_end), (selection_start - selection_end).abs())
+		draw_rect(rect, selection_color, true)
+		draw_rect(rect, border_color, false, 2.0)
+
+func _clear_selection() -> void:
+	for unit in selected_units:
+		if is_instance_valid(unit):
+			unit.modulate = Color.WHITE
+			var visual: CanvasItem = unit.get_node_or_null("ColorRect") as CanvasItem
+			if visual != null:
+				visual.modulate = Color.WHITE
+	selected_units.clear()
+	selected_squads.clear()
+
+func _assign_control_group(group_id: int) -> void:
+	var members: Array = []
+	for unit in selected_units:
+		if is_instance_valid(unit):
+			members.append(unit)
+	for squad in selected_squads:
+		if is_instance_valid(squad):
+			members.append(squad)
+	control_groups[group_id] = members
+	var hud: Node = get_tree().get_first_node_in_group("game_hud")
+	if hud != null and hud.has_method("_show_notification"):
+		hud.call("_show_notification", "Group " + str(group_id) + " assigned")
+
+func _select_control_group(group_id: int) -> void:
+	if not control_groups.has(group_id):
+		return
+	_clear_selection()
+	var members: Array = control_groups[group_id]
+	var valid_members: Array = []
+	for member in members:
+		if not is_instance_valid(member):
+			continue
+		valid_members.append(member)
+		if member is SquadController:
+			if member not in selected_squads:
+				selected_squads.append(member)
+			for soldier in member.soldiers:
+				if is_instance_valid(soldier):
+					selected_units.append(soldier)
+					_highlight_unit(soldier)
+		elif member is Node2D:
+			selected_units.append(member)
+			_highlight_unit(member)
+	control_groups[group_id] = valid_members
+	selection_changed.emit(selected_units, selected_squads)
+
+func _highlight_unit(unit: Node2D) -> void:
+	unit.modulate = Color.WHITE
+	var visual: CanvasItem = unit.get_node_or_null("ColorRect") as CanvasItem
+	if visual != null:
+		visual.modulate = highlight_color
+
+func _select_units_in_box() -> void:
+	var rect: Rect2 = Rect2(selection_start.min(selection_end), (selection_start - selection_end).abs())
+	rect = rect.grow(12.0)
+	
+	_clear_selection()
+	
+	var squads: Array = get_tree().get_nodes_in_group("player_squads")
+	for squad_node in squads:
+		var squad = squad_node
+		if not is_instance_valid(squad):
+			continue
+		var squad_selected: bool = false
+		for soldier in squad.soldiers:
+			if not is_instance_valid(soldier):
+				continue
+			if rect.has_point(soldier.global_position):
+				squad_selected = true
+				break
+		if squad_selected:
+			selected_squads.append(squad)
+			for soldier in squad.soldiers:
+				if is_instance_valid(soldier):
+					var visual: CanvasItem = soldier.get_node_or_null("ColorRect") as CanvasItem
+					if visual != null:
+						visual.modulate = highlight_color
+					soldier.modulate = Color.WHITE
+					selected_units.append(soldier)
+	
+	# Р’С‹РґРµР»РµРЅРёРµ РѕРґРёРЅРѕС‡РЅРѕР№ С‚РµС…РЅРёРєРё Рё РґСЂРѕРЅРѕРІ
+	var vehicles: Array = get_tree().get_nodes_in_group("player_vehicles")
+	for vehicle in vehicles:
+		if is_instance_valid(vehicle) and rect.has_point(vehicle.global_position):
+			selected_units.append(vehicle)
+			vehicle.modulate = highlight_color
+
+	var drones: Array = get_tree().get_nodes_in_group("player_drones")
+	for drone in drones:
+		if is_instance_valid(drone) and rect.has_point(drone.global_position):
+			selected_units.append(drone)
+			drone.modulate = highlight_color
+
+	selection_changed.emit(selected_units, selected_squads)
+
+func _issue_move_command(target: Vector2) -> void:
+	for squad in selected_squads:
+		if is_instance_valid(squad):
+			squad.move_squad(target)
+	for unit in selected_units:
+		if is_instance_valid(unit) and (unit.is_in_group("player_vehicles") or unit.is_in_group("player_drones")) and unit.has_method("set_destination"):
+			unit.set_destination(target)
+
+func _issue_hold() -> void:
+	for squad in selected_squads:
+		if is_instance_valid(squad) and squad.has_method("hold"):
+			squad.hold()
+	for unit in selected_units:
+		if is_instance_valid(unit) and not (unit is Soldier) and unit.has_method("hold"):
+			unit.hold()
+	_notify("Hold position")
+
+func _issue_retreat() -> void:
+	var retreat_target: Vector2 = _nearest_friendly_rally_point()
+	for squad in selected_squads:
+		if is_instance_valid(squad) and squad.has_method("move_squad"):
+			squad.move_squad(retreat_target)
+	for unit in selected_units:
+		if is_instance_valid(unit) and not (unit is Soldier) and unit.has_method("set_destination"):
+			unit.set_destination(retreat_target)
+	_notify("Retreat")
+
+func _issue_attack_move(target: Vector2) -> void:
+	for squad in selected_squads:
+		if is_instance_valid(squad):
+			if squad.has_method("set_attack_move"):
+				squad.set_attack_move(true)
+			if squad.has_method("move_squad"):
+				squad.move_squad(target)
+	for unit in selected_units:
+		if is_instance_valid(unit) and not (unit is Soldier):
+			if unit.has_method("set_attack_move"):
+				unit.set_attack_move(true)
+			if unit.has_method("set_destination"):
+				unit.set_destination(target)
+	_notify("Attack-move")
+
+func _nearest_friendly_rally_point() -> Vector2:
+	var fallback: Vector2 = Vector2(200.0, 400.0)
+	var origin: Vector2 = fallback
+	if not selected_units.is_empty() and is_instance_valid(selected_units[0]):
+		origin = selected_units[0].global_position
+	var best: Vector2 = fallback
+	var best_dist: float = INF
+	for cp in get_tree().get_nodes_in_group("control_points"):
+		if not is_instance_valid(cp):
+			continue
+		if int(cp.get("point_owner")) != 1:
+			continue
+		var cp_pos: Vector2 = cp.global_position
+		var dist: float = origin.distance_to(cp_pos)
+		if dist < best_dist:
+			best_dist = dist
+			best = cp_pos
+	return best
+
+func _notify(text: String) -> void:
+	var hud: Node = get_tree().get_first_node_in_group("game_hud")
+	if hud != null and hud.has_method("_show_notification"):
+		hud.call("_show_notification", text)
+
+func issue_hold() -> void:
+	_issue_hold()
+
+func issue_retreat() -> void:
+	_issue_retreat()
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\Soldier.gd ===
+
+class_name Soldier
+extends CharacterBody2D
+
+@export var move_speed: float = 180.0
+@export var formation_offset: Vector2 = Vector2.ZERO
+
+@onready var nav_agent: NavigationAgent2D = $NavigationAgent2D
+var health_component: HealthComponent
+var weapon: WeaponComponent
+var morale_component: MoraleComponent
+var veterancy_component: VeterancyComponent
+
+var flashlight_on: bool = true
+var has_nvg: bool = false
+var _last_facing: Vector2 = Vector2.RIGHT
+var target_position: Vector2 = Vector2.ZERO
+var attack_move: bool = false
+var hold_mode: bool = false
+var squad_controller: Node2D = null
+var is_flanked: bool = false
+var _flank_marker: ColorRect = null
+
+
+func _ready() -> void:
+	z_index = 5
+	safe_margin = 0.08
+	set_physics_process(false)
+	
+	health_component = get_node_or_null("HealthComponent")
+	if health_component == null:
+		health_component = HealthComponent.new()
+		health_component.name = "HealthComponent"
+		add_child(health_component)
+	health_component.died.connect(_on_health_died)
+	
+	weapon = get_node_or_null("WeaponComponent")
+	if weapon == null:
+		weapon = WeaponComponent.new()
+		weapon.name = "WeaponComponent"
+		add_child(weapon)
+	morale_component = get_node_or_null("MoraleComponent")
+	if morale_component == null:
+		morale_component = MoraleComponent.new()
+		morale_component.name = "MoraleComponent"
+		add_child(morale_component)
+
+	veterancy_component = get_node_or_null("VeterancyComponent")
+	if veterancy_component == null:
+		veterancy_component = VeterancyComponent.new()
+		veterancy_component.name = "VeterancyComponent"
+		add_child(veterancy_component)
+
+	var cone := Polygon2D.new()
+	cone.name = "FlashlightCone"
+	cone.z_index = 51
+	cone.polygon = PackedVector2Array([
+		Vector2.ZERO,
+		Vector2(320.0, 0.0).rotated(deg_to_rad(-25.0)),
+		Vector2(320.0, 0.0).rotated(deg_to_rad(25.0))
+	])
+	cone.color = Color(1.0, 0.95, 0.7, 0.25)
+	cone.visible = false
+	add_child(cone)
+
+
+	
+	var parent = get_parent()
+	if parent is Node2D:
+		squad_controller = parent
+		var groups = parent.get_groups()
+		if "enemy_squads" in groups:
+			add_to_group("enemy_units")
+			weapon.target_group = "player_units"
+		else:
+			add_to_group("player_units")
+			weapon.target_group = "enemy_units"
+
+func set_destination(destination: Vector2) -> void:
+	target_position = destination
+	nav_agent.set_target_position(destination)
+	hold_mode = false
+	attack_move = false
+	set_physics_process(true)
+
+func hold() -> void:
+	hold_mode = true
+	attack_move = false
+	target_position = global_position
+	if nav_agent != null:
+		nav_agent.set_target_position(global_position)
+	velocity = Vector2.ZERO
+
+func stop() -> void:
+	hold_mode = false
+	attack_move = false
+	target_position = global_position
+	if nav_agent != null:
+		nav_agent.set_target_position(global_position)
+	velocity = Vector2.ZERO
+
+func set_attack_move(enabled: bool) -> void:
+	attack_move = enabled
+
+func set_flanked(flanked: bool) -> void:
+	is_flanked = flanked
+	if _flank_marker == null:
+		_flank_marker = ColorRect.new()
+		_flank_marker.name = "FlankMarker"
+		_flank_marker.size = Vector2(10.0, 10.0)
+		_flank_marker.position = Vector2(-5.0, -20.0)
+		_flank_marker.color = Color(1.0, 0.0, 0.0, 0.8)
+		_flank_marker.z_index = 50
+		_flank_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_flank_marker)
+	if _flank_marker != null:
+		_flank_marker.visible = flanked
+
+func _physics_process(_delta: float) -> void:
+	if nav_agent.is_navigation_finished():
+		velocity = Vector2.ZERO
+		move_and_slide()
+		set_physics_process(false)
+		return
+	
+	if attack_move and weapon != null and is_instance_valid(weapon) and weapon.current_target != null and is_instance_valid(weapon.current_target):
+		if global_position.distance_to(weapon.current_target.global_position) <= weapon.attack_range:
+			velocity = Vector2.ZERO
+			move_and_slide()
+			return
+	var next_pos: Vector2 = nav_agent.get_next_path_position()
+	if next_pos == Vector2.ZERO:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+	
+	var dir: Vector2 = (next_pos - global_position).normalized()
+	velocity = dir * move_speed
+	_last_facing = dir
+	move_and_slide()
+
+func _on_health_died(soldier: Node2D) -> void:
+	set_physics_process(false)
+	if squad_controller != null:
+		squad_controller.call("on_soldier_died", soldier)
+
+func _process(_delta: float) -> void:
+	var cone: Polygon2D = get_node_or_null("FlashlightCone") as Polygon2D
+	if cone == null:
+		return
+	var fog: FogOfWarManager = get_tree().get_first_node_in_group("fog_of_war") as FogOfWarManager
+	var is_night: bool = fog != null and fog.is_night
+	var rank: int = 0
+	if veterancy_component != null:
+		rank = veterancy_component.rank
+
+	# Р Р°Р·РІРѕСЂРѕС‚ Рє С†РµР»Рё РёР»Рё РїРѕ РІРµРєС‚РѕСЂСѓ РґРІРёР¶РµРЅРёСЏ
+	var desired_facing: Vector2 = _last_facing
+	if weapon != null and weapon.current_target != null and is_instance_valid(weapon.current_target):
+		desired_facing = (weapon.current_target.global_position - global_position).normalized()
+	elif velocity.length() > 1.0:
+		desired_facing = velocity.normalized()
+	_last_facing = Vector2.from_angle(lerp_angle(_last_facing.angle(), desired_facing.angle(), clampf(_delta * 8.0, 0.0, 1.0)))
+
+	# Р’РёРґРёРјРѕСЃС‚СЊ РєРѕРЅСѓСЃР° С„РѕРЅР°СЂРёРєР°: С‚РѕР»СЊРєРѕ Rookie Р±РµР· РџРќР’, С‚РѕР»СЊРєРѕ РЅРѕС‡СЊ, С‚РѕР»СЊРєРѕ_player_units, С‚РѕР»СЊРєРѕ flashlight_on
+	cone.visible = is_night and rank == VeterancyComponent.Rank.ROOKIE and not has_nvg and is_in_group("player_units") and flashlight_on
+	cone.rotation = _last_facing.angle()
+	if _flank_marker != null and _flank_marker.visible:
+		_flank_marker.position = Vector2(-5.0, -20.0)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\SquadController.gd ===
+
+class_name SquadController
+extends Node2D
+
+const _CFG := preload("res://scripts/core/GameConfig.gd")
+
+@export var formation_spacing: float = 24.0
+@export var formation: int = 0
+@export var specialist_type: int = 0
+
+enum Formation { LINE = 0, COLUMN = 1, WEDGE = 2, SPREAD = 3 }
+
+var soldiers: Array = []
+var formation_offsets: Array[Vector2] = []
+var specialist_component: SpecialistComponent
+
+func _ready() -> void:
+	# РћРїСЂРµРґРµР»СЏРµРј РіСЂСѓРїРїСѓ РѕС‚СЂСЏРґР° вЂ” РµСЃР»Рё РѕС‚СЂСЏРґ РІСЂР°Р¶РµСЃРєРёР№, РЅРµ СЃС‡РёС‚Р°РµРј РµРіРѕ РёРіСЂРѕРєРѕРј
+	if not is_in_group("enemy_squads"):
+		add_to_group("player_squads")
+	
+	# РЎРѕР·РґР°С‘Рј NavigationPolygon РґР»СЏ РЅР°РІРёРіР°С†РёРё, С‚РѕР»СЊРєРѕ РµСЃР»Рё СЃРµС‚РєР° РµС‰С‘ РЅРµ Р·Р°РґР°РЅР°
+	var nav_region: NavigationRegion2D = get_node("/root/Main/NavRegion") as NavigationRegion2D
+	if nav_region.navigation_polygon == null:
+		var np = NavigationPolygon.new()
+		np.vertices = PackedVector2Array([Vector2(0, 0), Vector2(_CFG.MAP_WIDTH, 0), Vector2(_CFG.MAP_WIDTH, _CFG.MAP_HEIGHT), Vector2(0, _CFG.MAP_HEIGHT)])
+		np.polygons = [PackedInt32Array([0, 1, 2, 3])]
+		nav_region.navigation_polygon = np
+	
+	formation_offsets = []
+	_update_formation_offsets()
+	
+	soldiers = []
+	for child in get_children():
+		if child is CharacterBody2D:
+			soldiers.append(child)
+	
+	for i in range(soldiers.size()):
+		if i < formation_offsets.size():
+			soldiers[i].formation_offset = formation_offsets[i]
+	specialist_component = get_node_or_null("SpecialistComponent")
+	if specialist_component == null:
+		specialist_component = SpecialistComponent.new()
+		specialist_component.name = "SpecialistComponent"
+		specialist_component.specialist_type = specialist_type
+		add_child(specialist_component)
+
+
+func move_squad(destination: Vector2) -> void:
+	var squad_center: Vector2 = Vector2.ZERO
+	var valid_count: int = 0
+	for i in range(soldiers.size()):
+		if is_instance_valid(soldiers[i]):
+			squad_center += soldiers[i].global_position
+			valid_count += 1
+	if valid_count > 0:
+		squad_center /= float(valid_count)
+	var dir: Vector2 = (destination - squad_center)
+	var rotate_angle: float = 0.0
+	if dir.length() > 1.0:
+		rotate_angle = dir.angle()
+	for i in range(soldiers.size()):
+		if not is_instance_valid(soldiers[i]):
+			continue
+		var offset: Vector2 = formation_offsets[i % formation_offsets.size()].rotated(rotate_angle)
+		var squad_dest: Vector2 = destination + offset
+		soldiers[i].set_destination(squad_dest)
+
+func _update_formation_offsets() -> void:
+	formation_offsets = []
+	match formation:
+		Formation.LINE:
+			formation_offsets = [
+				Vector2(0.0, -formation_spacing),
+				Vector2.ZERO,
+				Vector2(0.0, formation_spacing)
+			]
+		Formation.COLUMN:
+			formation_offsets = [
+				Vector2(-formation_spacing, 0.0),
+				Vector2.ZERO,
+				Vector2(formation_spacing, 0.0)
+			]
+		Formation.WEDGE:
+			formation_offsets = [
+				Vector2(-formation_spacing, -formation_spacing),
+				Vector2.ZERO,
+				Vector2(formation_spacing, -formation_spacing)
+			]
+		Formation.SPREAD:
+			formation_offsets = [
+				Vector2(-formation_spacing * 1.5, -formation_spacing),
+				Vector2.ZERO,
+				Vector2(formation_spacing * 1.5, -formation_spacing)
+			]
+		_:
+			formation_offsets = [
+				Vector2(0.0, -formation_spacing),
+				Vector2.ZERO,
+				Vector2(0.0, formation_spacing)
+			]
+
+func set_formation(new_formation: int) -> void:
+	formation = new_formation
+	_update_formation_offsets()
+	for i in range(soldiers.size()):
+		if i < formation_offsets.size() and is_instance_valid(soldiers[i]):
+			soldiers[i].formation_offset = formation_offsets[i]
+
+func hold() -> void:
+	for i in range(soldiers.size()):
+		if is_instance_valid(soldiers[i]) and soldiers[i].has_method("hold"):
+			soldiers[i].hold()
+
+func stop() -> void:
+	for i in range(soldiers.size()):
+		if is_instance_valid(soldiers[i]) and soldiers[i].has_method("stop"):
+			soldiers[i].stop()
+
+func set_attack_move(enabled: bool) -> void:
+	for i in range(soldiers.size()):
+		if is_instance_valid(soldiers[i]) and soldiers[i].has_method("set_attack_move"):
+			soldiers[i].set_attack_move(enabled)
+
+func on_soldier_died(soldier: Node2D) -> void:
+	if is_instance_valid(soldier):
+		soldiers.erase(soldier)
+		for s in soldiers:
+			if is_instance_valid(s):
+				var m: MoraleComponent = s.get_node_or_null("MoraleComponent") as MoraleComponent
+				if m != null:
+					m.reduce_morale(20.0)
+	if is_instance_valid(soldier):
+		var stain_pos: Vector2 = soldier.global_position
+		if soldier.is_in_group("enemy_units") and randf() < 0.35:
+			call_deferred("_spawn_loot", stain_pos)
+		var stain := ColorRect.new()
+		stain.size = Vector2(14.0, 14.0)
+		stain.position = stain_pos - Vector2(7.0, 7.0)
+		stain.color = Color(0.35, 0.05, 0.05, 0.65)
+		stain.z_index = 1
+		stain.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stain.add_to_group("mission_cleanup")
+		if get_tree() != null and get_tree().current_scene != null:
+			get_tree().current_scene.add_child(stain)
+		var stain_tween := stain.create_tween()
+		stain_tween.tween_property(stain, "modulate:a", 0.0, 8.0)
+		stain_tween.tween_callback(stain.queue_free)
+		soldier.queue_free()
+	if soldiers.is_empty():
+		queue_free()
+
+func _spawn_loot(pos: Vector2) -> void:
+	var crate := LootCrate.new()
+	crate.loot_type = randi() % 3
+	get_tree().current_scene.add_child(crate)
+	crate.global_position = pos
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\core\WeaponComponent.gd ===
+
+class_name WeaponComponent
+extends Node2D
+
+@export var attack_range: float = 400.0
+@export var attack_damage: int = 25
+@export var attack_cooldown: float = 1.0
+@export var projectile_speed: float = 600.0
+@export var target_group: String = "enemy_units"
+@export var is_anti_tank: bool = false
+@export var burst_enabled: bool = true
+
+var detection_area: Area2D
+var muzzle: Node2D
+var cooldown_timer: float = 0.0
+var current_target: Node2D = null
+var _last_flanked_target: Node2D = null
+var _burst_count: int = 0
+var _burst_timer: float = 0.0
+
+func _ready() -> void:
+	detection_area = get_node_or_null("DetectionArea")
+	if detection_area == null:
+		detection_area = Area2D.new()
+		detection_area.name = "DetectionArea"
+		var shape := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = attack_range
+		shape.shape = circle
+		detection_area.add_child(shape)
+		add_child(detection_area)
+	
+	muzzle = get_node_or_null("Muzzle")
+	if muzzle == null:
+		muzzle = Node2D.new()
+		muzzle.name = "Muzzle"
+		add_child(muzzle)
+
+func _process(delta: float) -> void:
+	if cooldown_timer > 0.0:
+		cooldown_timer -= delta
+	if _burst_timer > 0.0:
+		_burst_timer -= delta
+	var desired_radius: float = attack_range
+	var fog: Node = get_tree().get_first_node_in_group("fog_of_war")
+	var is_night: bool = fog != null and fog.get("is_night") == true
+	if is_night and target_group == "player_units":
+		desired_radius = maxf(attack_range, 450.0)
+	var shape_node: CollisionShape2D = detection_area.get_child(0) as CollisionShape2D
+	if shape_node != null:
+		var circle: CircleShape2D = shape_node.shape as CircleShape2D
+		if circle != null and circle.radius != desired_radius:
+			circle.radius = desired_radius
+	if current_target == null or not is_instance_valid(current_target):
+		_find_target()
+	if current_target != null:
+		if not current_target.visible:
+			current_target = null
+			return
+		if is_night:
+			var shooter: Node2D = get_parent() as Node2D
+			var allowed: float = _get_night_allowed_distance(shooter, current_target)
+			if global_position.distance_to(current_target.global_position) > allowed:
+				current_target = null
+				return
+		if not _has_line_of_sight(current_target):
+			current_target = null
+			return
+		# Р¤Р»Р°РЅРі-РјР°СЂРєРµСЂ: РїРѕРјРµС‡Р°РµРј С†РµР»СЊ, РµСЃР»Рё СЃС‚СЂРµР»СЏРµРј РІ СЃРїРёРЅСѓ
+		var prev_flanked: Node2D = _last_flanked_target
+		_last_flanked_target = null
+		if current_target is Soldier:
+			var target_soldier: Soldier = current_target as Soldier
+			var to_target: Vector2 = (current_target.global_position - global_position).normalized()
+			var dot: float = to_target.dot(target_soldier._last_facing)
+			if dot < -0.5:
+				target_soldier.set_flanked(true)
+				_last_flanked_target = current_target
+			else:
+				target_soldier.set_flanked(false)
+		if prev_flanked != null and prev_flanked != _last_flanked_target and is_instance_valid(prev_flanked):
+			var prev_soldier: Soldier = prev_flanked as Soldier
+			if prev_soldier != null:
+				prev_soldier.set_flanked(false)
+		var dist_to_target: float = global_position.distance_to(current_target.global_position)
+		if cooldown_timer <= 0.0:
+			if burst_enabled and _burst_count < 3 and dist_to_target > 120.0 and dist_to_target <= 260.0:
+				if _burst_timer <= 0.0:
+					_shoot()
+					_burst_count += 1
+					_burst_timer = 0.13
+					if _burst_count >= 3:
+						_burst_count = 0
+						_burst_timer = 0.0
+						cooldown_timer = attack_cooldown
+			elif dist_to_target <= 120.0:
+				_shoot()
+				cooldown_timer = randf_range(0.20, 0.34)
+			elif dist_to_target > 260.0:
+				_shoot()
+				cooldown_timer = attack_cooldown * randf_range(0.9, 1.35)
+			else:
+				_shoot()
+				cooldown_timer = attack_cooldown
+
+func _get_night_allowed_distance(shooter: Node2D, target: Node2D) -> float:
+	if target_group == "player_units":
+		# Р’СЂР°РіРё СЃС‚СЂРµР»СЏСЋС‚ РІ РёРіСЂРѕРєР°: С„РѕРЅР°СЂРёРє РёРіСЂРѕРєР° РґРµРјР°СЃРєРёСЂСѓРµС‚ РЅР° 450px, РёРЅР°С‡Рµ 130px
+		if target is Soldier:
+			var flashlight: bool = bool(target.get("flashlight_on"))
+			var has_nvg: bool = bool(target.get("has_nvg"))
+			if flashlight and not has_nvg:
+				return 450.0
+		return 130.0
+	else:
+		# РРіСЂРѕРє СЃС‚СЂРµР»СЏРµС‚ РІ РІСЂР°РіР°: РґРёСЃС‚Р°РЅС†РёСЏ Р·Р°РІРёСЃРёС‚ РѕС‚ РѕСЃРЅР°С‰РµРЅРёСЏ СЃС‚СЂРµР»РєР° (shooter)
+		if shooter is VehicleUnit:
+			return attack_range  # С‚РµС…РЅРёРєР° вЂ” РїРѕР»РЅС‹Р№ РѕР±Р·РѕСЂ
+		if shooter is Soldier:
+			var vc: VeterancyComponent = shooter.get_node_or_null("VeterancyComponent") as VeterancyComponent
+			var rank: int = vc.rank if vc != null else VeterancyComponent.Rank.ROOKIE
+			var has_nvg: bool = bool(shooter.get("has_nvg"))
+			var flashlight: bool = bool(shooter.get("flashlight_on"))
+			if rank >= VeterancyComponent.Rank.VETERAN:
+				return attack_range  # С‚РµРїР»РѕРІРёР·РѕСЂ вЂ” РїРѕР»РЅР°СЏ РґРёСЃС‚Р°РЅС†РёСЏ
+			if has_nvg:
+				return 300.0  # РџРќР’
+			if flashlight:
+				return 320.0  # С„РѕРЅР°СЂРёРє РґРµРјР°СЃРєРёСЂСѓРµС‚
+			return 140.0  # РЅРѕРІРёС‡РѕРє Р±РµР· РџРќР’ Рё СЃ РІС‹РєР»СЋС‡РµРЅРЅС‹Рј С„РѕРЅР°СЂРёРєРѕРј
+	return attack_range
+
+func _has_line_of_sight(target: Node2D) -> bool:
+	var shooter: Node2D = get_parent() as Node2D
+	if shooter == null or not is_instance_valid(shooter):
+		return false
+	if not (target is Node2D):
+		return false
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	if space == null:
+		return true
+	var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(global_position, (target as Node2D).global_position)
+	query.exclude = [shooter]
+	var result: Dictionary = space.intersect_ray(query)
+	if result.is_empty():
+		return true
+	var collider: Object = result.get("collider")
+	if collider is StaticBody2D:
+		var sb: StaticBody2D = collider as StaticBody2D
+		var hc: HealthComponent = sb.get_node_or_null("HealthComponent") as HealthComponent
+		if hc != null:
+			return true
+		if sb is FieldFortification:
+			return true
+		return false
+	return true
+
+func _find_target() -> void:
+	var bodies: Array = detection_area.get_overlapping_bodies()
+	var nearest: Node2D = null
+	var nearest_dist: float = INF
+	var fog: Node = get_tree().get_first_node_in_group("fog_of_war")
+	var is_night: bool = fog != null and fog.get("is_night") == true
+	var shooter: Node2D = get_parent() as Node2D
+	for body in bodies:
+		if not (body is Node2D):
+			continue
+		if not (target_group in body.get_groups()):
+			continue
+		if not body.visible:
+			continue
+		var dist: float = global_position.distance_to(body.global_position)
+		var allowed: float = attack_range
+		if is_night:
+			if target_group == "player_units":
+				if body is Soldier:
+					var flashlight: bool = bool(body.get("flashlight_on"))
+					var has_nvg: bool = bool(body.get("has_nvg"))
+					if flashlight and not has_nvg:
+						allowed = 450.0
+					else:
+						allowed = 130.0
+			else:
+				allowed = _get_night_allowed_distance(shooter, body)
+		if dist <= allowed and dist < nearest_dist and _has_line_of_sight(body):
+			nearest_dist = dist
+			nearest = body
+	current_target = nearest
+
+func _shoot() -> void:
+	if current_target == null:
+		return
+	var spawn_pos: Vector2 = muzzle.global_position if muzzle != null else global_position
+	var flash := ColorRect.new()
+	flash.size = Vector2(8.0, 8.0)
+	flash.position = spawn_pos - Vector2(4.0, 4.0)
+	flash.color = Color(1.0, 0.85, 0.25, 0.95)
+	flash.z_index = 10
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if get_tree() != null and get_tree().current_scene != null:
+		get_tree().current_scene.add_child(flash)
+	var flash_tween := create_tween()
+	flash_tween.tween_property(flash, "modulate:a", 0.0, 0.06)
+	flash_tween.tween_callback(flash.queue_free)
+	var bullet := Node2D.new()
+	var script_res := preload("res://scripts/core/Projectile.gd")
+	bullet.set_script(script_res)
+	bullet.set("shooter", get_parent())
+	var rect := ColorRect.new()
+	rect.size = Vector2(12.0, 2.5)
+	rect.position = Vector2(-6.0, -1.25)
+	rect.color = Color.YELLOW
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bullet.add_child(rect)
+	bullet.global_position = muzzle.global_position
+	bullet.rotation = (current_target.global_position - muzzle.global_position).angle()
+	get_tree().current_scene.add_child(bullet)
+	bullet.add_to_group("mission_cleanup")
+	bullet.set("is_anti_tank", is_anti_tank)
+	bullet.setup(current_target.global_position, projectile_speed, attack_damage, target_group)
+	if has_meta("morale_penalty"):
+		bullet.morale_penalty = int(get_meta("morale_penalty"))
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\environment\AnomalyZone.gd ===
+
+class_name AnomalyZone
+extends Area2D
+
+enum AnomalyType { VORTEX = 0, THERMAL = 1, EMP = 2 }
+
+@export var anomaly_type: int = AnomalyType.VORTEX
+@export var radius: float = 120.0
+@export var damage: int = 8
+
+var _vortex_timers: Dictionary = {}
+var _emp_original_speeds: Dictionary = {}
+var _thermal_timer: float = 0.0
+
+func _ready() -> void:
+	if get_node_or_null("CollisionShape2D") == null:
+		var cs := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = radius
+		cs.shape = circle
+		add_child(cs)
+
+	if get_node_or_null("ColorRect") == null:
+		var rect := ColorRect.new()
+		rect.size = Vector2(radius * 2.0, radius * 2.0)
+		rect.position = Vector2(-radius, -radius)
+		match anomaly_type:
+			AnomalyType.VORTEX:
+				rect.color = Color(0.5, 0.1, 0.8, 0.35)
+			AnomalyType.THERMAL:
+				rect.color = Color(0.9, 0.3, 0.1, 0.35)
+			_:
+				rect.color = Color(0.1, 0.6, 0.9, 0.35)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(rect)
+
+	add_to_group("anomaly_zones")
+	body_entered.connect(_on_body_entered)
+	body_exited.connect(_on_body_exited)
+
+func _process(delta: float) -> void:
+	_try_sapper_disarm()
+
+	match anomaly_type:
+		AnomalyType.VORTEX:
+			_process_vortex(delta)
+		AnomalyType.THERMAL:
+			_process_thermal(delta)
+		AnomalyType.EMP:
+			pass
+
+func _try_sapper_disarm() -> void:
+	for body in get_overlapping_bodies():
+		if not (body is Node):
+			continue
+		var squad: Node = body.get("squad_controller")
+		if squad == null or not is_instance_valid(squad):
+			continue
+		var specialist: SpecialistComponent = squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
+		if specialist != null and specialist.specialist_type == SpecialistComponent.Type.SAPPER:
+			queue_free()
+			return
+
+func _process_vortex(delta: float) -> void:
+	for body in get_overlapping_bodies():
+		if not (body is CharacterBody2D):
+			continue
+		var to_center: Vector2 = global_position - body.global_position
+		if to_center.length() > 1.0:
+			body.velocity = body.velocity.lerp(to_center.normalized() * 140.0, 0.25)
+
+		if not _vortex_timers.has(body):
+			_vortex_timers[body] = 0.0
+		_vortex_timers[body] = float(_vortex_timers[body]) + delta
+		if float(_vortex_timers[body]) >= 1.0:
+			_vortex_timers[body] = 0.0
+			_apply_damage(body, damage)
+
+func _process_thermal(delta: float) -> void:
+	_thermal_timer += delta
+	if _thermal_timer < 3.0:
+		return
+	_thermal_timer = 0.0
+	for body in get_overlapping_bodies():
+		if body is CharacterBody2D:
+			_apply_damage(body, damage * 3)
+
+func _on_body_entered(body: Node) -> void:
+	if anomaly_type != AnomalyType.EMP:
+		return
+	if not (body is CharacterBody2D):
+		return
+	if body is DroneUnit:
+		body.disabled = true
+	elif body is VehicleUnit:
+		if not _emp_original_speeds.has(body):
+			_emp_original_speeds[body] = body.move_speed
+		body.move_speed = body.move_speed * 0.3
+
+func _on_body_exited(body: Node) -> void:
+	if anomaly_type == AnomalyType.VORTEX:
+		_vortex_timers.erase(body)
+	if anomaly_type == AnomalyType.EMP:
+		if body is DroneUnit:
+			body.disabled = false
+		elif body is VehicleUnit and _emp_original_speeds.has(body):
+			body.move_speed = float(_emp_original_speeds[body])
+			_emp_original_speeds.erase(body)
+
+func _apply_damage(body: Node, amount: int) -> void:
+	if body.has_method("take_damage"):
+		body.take_damage(amount)
+	else:
+		var health: HealthComponent = body.get_node_or_null("HealthComponent") as HealthComponent
+		if health != null:
+			health.take_damage(amount)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\environment\ArtifactPickup.gd ===
+
+class_name ArtifactPickup
+extends Area2D
+
+enum BuffType { SPEED = 0, HP = 1 }
+
+@export var buff_type: int = BuffType.SPEED
+
+var picked_up: bool = false
+var affected_squad: Node = null
+
+func _ready() -> void:
+	if get_node_or_null("CollisionShape2D") == null:
+		var cs := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = 18.0
+		cs.shape = circle
+		add_child(cs)
+
+	if get_node_or_null("ColorRect") == null:
+		var rect := ColorRect.new()
+		rect.size = Vector2(20.0, 20.0)
+		rect.position = Vector2(-10.0, -10.0)
+		rect.color = Color(0.9, 0.8, 0.2, 0.9)
+		add_child(rect)
+
+	add_to_group("artifact_pickups")
+	body_entered.connect(_on_body_entered)
+
+func _on_body_entered(body: Node) -> void:
+	if picked_up:
+		return
+	if not body.is_in_group("player_units"):
+		return
+	var squad: Node = body.get("squad_controller")
+	if squad == null or not is_instance_valid(squad) or not squad.is_in_group("player_squads"):
+		return
+
+	picked_up = true
+	affected_squad = squad
+
+	for child in get_children():
+		if child is CollisionShape2D:
+			child.set_deferred("disabled", true)
+		if child is ColorRect:
+			child.visible = false
+
+	_apply_buff(squad)
+
+func _apply_buff(squad: Node) -> void:
+	var soldiers: Array = squad.get("soldiers")
+	if soldiers == null:
+		return
+	for s in soldiers:
+		if not is_instance_valid(s):
+			continue
+		if buff_type == BuffType.SPEED:
+			if not s.has_meta("base_move_speed"):
+				s.set_meta("base_move_speed", s.move_speed)
+			var base_speed: float = float(s.get_meta("base_move_speed"))
+			s.move_speed = base_speed * 1.3
+		else:
+			var health: HealthComponent = s.get_node_or_null("HealthComponent") as HealthComponent
+			if health != null:
+				var old_max: int = health.max_hp
+				health.max_hp = int(round(old_max * 1.3))
+				health.current_hp += health.max_hp - old_max
+
+func _process(delta: float) -> void:
+	if not picked_up or affected_squad == null or not is_instance_valid(affected_squad):
+		return
+	var soldiers: Array = affected_squad.get("soldiers")
+	if soldiers == null:
+		return
+	for s in soldiers:
+		if not is_instance_valid(s):
+			continue
+		var morale: MoraleComponent = s.get_node_or_null("MoraleComponent") as MoraleComponent
+		if morale != null:
+			morale.current_morale = maxf(0.0, morale.current_morale - 2.0 * delta)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\environment\Campfire.gd ===
+
+class_name Campfire extends Node2D
+
+var _pulse: float = 0.0
+
+func _ready() -> void:
+	add_to_group("campfires")
+	add_to_group("mission_cleanup")
+
+func _process(delta: float) -> void:
+	# РџСѓР»СЊСЃР°С†РёСЏ РѕРіРѕРЅСЊРєР°
+	_pulse += delta * 3.0
+	var a: float = clampf(0.7 + 0.3 * sin(_pulse), 0.6, 1.0)
+	var flame: ColorRect = get_node_or_null("Flame") as ColorRect
+	if flame != null:
+		flame.modulate.a = a
+
+	# Р РµРіРµРЅРµСЂР°С†РёСЏ РјРѕСЂР°Р»Рё СЃРѕСЋР·РЅРёРєР°Рј РІ СЂР°РґРёСѓСЃРµ 95
+	for u in get_tree().get_nodes_in_group("player_units"):
+		if not is_instance_valid(u) or not (u is Node2D):
+			continue
+		var dist: float = global_position.distance_to((u as Node2D).global_position)
+		if dist <= 95.0:
+			var morale: MoraleComponent = u.get_node_or_null("MoraleComponent") as MoraleComponent
+			if morale != null:
+				morale.current_morale = minf(morale.max_morale, morale.current_morale + 3.0 * delta)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\environment\LootCrate.gd ===
+
+class_name LootCrate
+extends Area2D
+
+enum LootType { SP_CACHE = 0, MEDKIT = 1, TROPHY_RPG = 2 }
+
+@export var loot_type: int = LootType.SP_CACHE
+
+var _label: Label
+
+func _ready() -> void:
+	add_to_group("mission_cleanup")
+	add_to_group("loot_crates")
+	var rect := ColorRect.new()
+	rect.size = Vector2(14.0, 14.0)
+	rect.position = Vector2(-7.0, -7.0)
+	match loot_type:
+		LootType.SP_CACHE:
+			rect.color = Color(0.95, 0.75, 0.2, 1.0)
+		LootType.MEDKIT:
+			rect.color = Color(0.2, 0.8, 0.2, 1.0)
+		LootType.TROPHY_RPG:
+			rect.color = Color(0.8, 0.4, 0.9, 1.0)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(rect)
+
+	_label = Label.new()
+	_label.text = _get_label_text()
+	_label.position = Vector2(-16.0, -22.0)
+	_label.add_theme_font_size_override("font_size", 10)
+	add_child(_label)
+
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 18.0
+	shape.shape = circle
+	add_child(shape)
+	body_entered.connect(_on_body_entered)
+
+func _get_label_text() -> String:
+	match loot_type:
+		LootType.SP_CACHE:
+			return "+45 SP"
+		LootType.MEDKIT:
+			return "Medkit"
+		LootType.TROPHY_RPG:
+			return "RPG"
+	return ""
+
+func _on_body_entered(body: Node2D) -> void:
+	if not body.is_in_group("player_units") or body.is_in_group("player_turrets") or body.is_in_group("player_drones"):
+		return
+	match loot_type:
+		LootType.SP_CACHE:
+			var eco: EconomyManager = get_tree().get_first_node_in_group("economy") as EconomyManager
+			if eco != null:
+				eco.add_sp(45)
+		LootType.MEDKIT:
+			_heal_squad(body)
+		LootType.TROPHY_RPG:
+			_upgrade_weapon(body)
+	_show_notification()
+	queue_free()
+
+func _heal_squad(body: Node2D) -> void:
+	var squad: Node2D = body.get_parent() as Node2D
+	var soldiers: Array = []
+	if squad is SquadController:
+		soldiers = (squad as SquadController).soldiers
+	if not soldiers.is_empty():
+		for s in soldiers:
+			if is_instance_valid(s):
+				var health: HealthComponent = s.get_node_or_null("HealthComponent") as HealthComponent
+				var morale: MoraleComponent = s.get_node_or_null("MoraleComponent") as MoraleComponent
+				if health != null:
+					health.current_hp = mini(health.max_hp, health.current_hp + 50)
+				if morale != null:
+					morale.current_morale = minf(morale.max_morale, morale.current_morale + 25.0)
+	else:
+		var health: HealthComponent = body.get_node_or_null("HealthComponent") as HealthComponent
+		if health != null:
+			health.current_hp = mini(health.max_hp, health.current_hp + 50)
+
+func _upgrade_weapon(body: Node2D) -> void:
+	var squad: Node2D = body.get_parent() as Node2D
+	var soldiers: Array = []
+	if squad is SquadController:
+		soldiers = (squad as SquadController).soldiers
+	if not soldiers.is_empty():
+		for s in soldiers:
+			if is_instance_valid(s):
+				var weapon: WeaponComponent = s.get_node_or_null("WeaponComponent") as WeaponComponent
+				if weapon != null:
+					weapon.attack_damage += 12
+					weapon.attack_range += 60.0
+					weapon.is_anti_tank = true
+	else:
+		var weapon: WeaponComponent = body.get_node_or_null("WeaponComponent") as WeaponComponent
+		if weapon != null:
+			weapon.attack_damage += 12
+			weapon.attack_range += 60.0
+			weapon.is_anti_tank = true
+
+func _show_notification() -> void:
+	var hud: Node = get_tree().get_first_node_in_group("game_hud")
+	if hud != null and hud.has_method("_show_notification"):
+		hud.call("_show_notification", "Loot received!")
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\environment\RadZone.gd ===
+
+class_name RadZone extends Area2D
+
+var _accum: float = 0.0
+
+func _ready() -> void:
+	add_to_group("mission_cleanup")
+
+func _process(delta: float) -> void:
+	_accum += 3.0 * delta
+	if _accum >= 1.0:
+		_accum = 0.0
+		for body in get_overlapping_bodies():
+			var health: HealthComponent = body.get_node_or_null("HealthComponent") as HealthComponent
+			if health and is_instance_valid(body):
+				health.take_damage(3)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\environment\ZoneEnvironment.gd ===
+
+class_name ZoneEnvironment extends Node2D
+
+const _CFG := preload("res://scripts/core/GameConfig.gd")
+
+func _ready() -> void:
+	add_to_group("mission_cleanup")
+	z_index = 0
+
+func generate_map(seed_val: int = 0) -> void:
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	if seed_val != 0:
+		rng.seed = seed_val
+	else:
+		rng.randomize()
+	# --- РђРЎР¤РђР›Р¬РўРћР’РђРЇ Р”РћР РћР“Рђ ---
+	var road: Area2D = Area2D.new()
+	road.name = "Road"
+	var road_coll: CollisionShape2D = CollisionShape2D.new()
+	road_coll.shape = RectangleShape2D.new()
+	(road_coll.shape as RectangleShape2D).size = Vector2(_CFG.MAP_WIDTH, 70.0)
+	road.add_child(road_coll)
+
+	var road_visual: ColorRect = ColorRect.new()
+	road_visual.color = Color(0.22, 0.23, 0.25, 0.85)
+	road_visual.size = Vector2(_CFG.MAP_WIDTH, 70.0)
+	road_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	road.add_child(road_visual)
+
+	# РџСЂРµСЂС‹РІРёСЃС‚Р°СЏ Р¶С‘Р»С‚Р°СЏ СЂР°Р·РјРµС‚РєР° РїРѕ С†РµРЅС‚СЂСѓ
+	for i in range(0, int(_CFG.MAP_WIDTH), 60):
+		var dash: ColorRect = ColorRect.new()
+		dash.color = Color(0.95, 0.85, 0.05, 0.9)
+		dash.size = Vector2(30.0, 6.0)
+		dash.position = Vector2(float(i), 32.0)
+		dash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		road_visual.add_child(dash)
+
+	# Р¦РµРЅС‚СЂРёСЂРѕРІР°РЅРёРµ
+	road.position = Vector2(960.0, 540.0)
+	road_visual.position = Vector2(-960.0, -35.0)
+	add_child(road)
+
+	# body_entered: +30% С‚РµС…РЅРёРєР°, +15% РїРµС…РѕС‚Р°
+	road.body_entered.connect(func(body: Node) -> void:
+		if body.get("move_speed") == null:
+			return
+		if not body.has_meta("terrain_base_move_speed"):
+			body.set_meta("terrain_base_move_speed", body.get("move_speed"))
+		if not body.has_meta("road_mult"):
+			body.set_meta("road_mult", 1.0)
+		if not body.has_meta("swamp_mult"):
+			body.set_meta("swamp_mult", 1.0)
+		var road_mult: float = 1.0
+		if body.is_in_group("player_vehicles") or body.is_in_group("enemy_vehicles"):
+			road_mult = 1.3
+		elif body.is_in_group("player_units") or body.is_in_group("enemy_units"):
+			road_mult = 1.15
+		body.set_meta("road_mult", road_mult)
+		var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
+		var current_road_mult: float = float(body.get_meta("road_mult"))
+		var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
+		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
+	)
+
+	# body_exited: РїРµСЂРµСЃС‡РёС‚Р°С‚СЊ СЃРєРѕСЂРѕСЃС‚СЊ Р±РµР· РґРѕСЂРѕРіРё
+	road.body_exited.connect(func(body: Node) -> void:
+		if not body.has_meta("terrain_base_move_speed"):
+			return
+		body.set_meta("road_mult", 1.0)
+		var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
+		var current_road_mult: float = float(body.get_meta("road_mult"))
+		var current_swamp_mult: float = 1.0
+		if body.has_meta("swamp_mult"):
+			current_swamp_mult = float(body.get_meta("swamp_mult"))
+		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
+	)
+	if seed_val != 0:
+		rng.seed = seed_val
+	else:
+		rng.randomize()
+	var placed: Array[Vector2] = []
+	# --- Р‘РћР›РћРўРђ (3вЂ“4 Р·РѕРЅС‹) ---
+	var swamp_count: int = rng.randi_range(3, 4)
+	for i in range(swamp_count):
+		var swamp: Area2D = Area2D.new()
+		swamp.name = "Swamp_%d" % i
+		var swamp_coll: CollisionShape2D = CollisionShape2D.new()
+		swamp_coll.shape = RectangleShape2D.new()
+		(swamp_coll.shape as RectangleShape2D).size = Vector2(180.0, 130.0)
+		swamp.add_child(swamp_coll)
+
+		var swamp_visual: ColorRect = ColorRect.new()
+		swamp_visual.color = Color(0.18, 0.24, 0.14, 0.78)
+		swamp_visual.size = Vector2(180.0, 130.0)
+		swamp_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		swamp_visual.position = Vector2(-90.0, -65.0)
+		swamp.add_child(swamp_visual)
+
+		swamp.position = _pick_free_spot(rng, placed, 150.0)
+		placed.append(swamp.position)
+		add_child(swamp)
+
+		swamp.body_entered.connect(func(body: Node) -> void:
+			if body.get("move_speed") == null:
+				return
+			if not body.has_meta("terrain_base_move_speed"):
+				body.set_meta("terrain_base_move_speed", body.get("move_speed"))
+			if not body.has_meta("road_mult"):
+				body.set_meta("road_mult", 1.0)
+			if not body.has_meta("swamp_mult"):
+				body.set_meta("swamp_mult", 1.0)
+			body.set_meta("swamp_mult", 0.6)
+			var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
+			var current_road_mult: float = float(body.get_meta("road_mult"))
+			var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
+			body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
+		)
+
+		swamp.body_exited.connect(func(body: Node) -> void:
+			if not body.has_meta("terrain_base_move_speed"):
+				return
+			body.set_meta("swamp_mult", 1.0)
+			var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
+			var current_road_mult: float = 1.0
+			if body.has_meta("road_mult"):
+				current_road_mult = float(body.get_meta("road_mult"))
+			var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
+			body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
+		)
+	# --- Р РђР”РРћРђРљРўРР’РќР«Р• Р›РЈР–Р (2вЂ“3 РїСЏС‚РЅР°) ---
+	var rad_count: int = rng.randi_range(2, 3)
+	for i in range(rad_count):
+		var rad: Area2D = Area2D.new()
+		rad.name = "RadPuddle_%d" % i
+		var rad_coll: CollisionShape2D = CollisionShape2D.new()
+		rad_coll.shape = RectangleShape2D.new()
+		(rad_coll.shape as RectangleShape2D).size = Vector2(80.0, 80.0)
+		rad.add_child(rad_coll)
+
+		var rad_visual: ColorRect = ColorRect.new()
+		rad_visual.color = Color(0.25, 0.85, 0.2, 0.42)
+		rad_visual.size = Vector2(80.0, 80.0)
+		rad_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rad.add_child(rad_visual)
+
+		# РџРѕРґРїРёСЃСЊ "Р РђР”."
+		var label: Label = Label.new()
+		label.text = "RAD"
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.size = Vector2(80.0, 80.0)
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.add_theme_font_size_override("font_size", 10)
+		rad.add_child(label)
+
+		rad_visual.position = Vector2(-40.0, -40.0)
+		label.position = Vector2(-40.0, -40.0)
+		rad.position = _pick_free_spot(rng, placed, 130.0)
+		placed.append(rad.position)
+		rad.set_script(preload("res://scripts/environment/RadZone.gd"))
+		add_child(rad)
+	# --- Р Р–РђР’Р«Р• РћРЎРўР«Р’Р« РўР•РҐРќРРљР Р Р‘Р•РўРћРќРќР«Р• Р РЈРРќР« (5вЂ“6 РѕР±СЉРµРєС‚РѕРІ) ---
+	var cover_count: int = rng.randi_range(5, 6)
+	for i in range(cover_count):
+		var is_btr: bool = rng.randi_range(0, 1) == 0
+		var cover: StaticBody2D = StaticBody2D.new()
+		cover.name = "Cover_%d" % i
+
+		var cover_coll: CollisionShape2D = CollisionShape2D.new()
+		cover_coll.shape = RectangleShape2D.new()
+		var w: float
+		var h: float
+		if is_btr:
+			w = 44.0
+			h = 24.0
+		else:
+			w = 60.0
+			h = 20.0
+		(cover_coll.shape as RectangleShape2D).size = Vector2(w, h)
+		cover.add_child(cover_coll)
+
+		var cover_visual: ColorRect = ColorRect.new()
+		if is_btr:
+			cover_visual.color = Color(0.38, 0.26, 0.18)
+		else:
+			cover_visual.color = Color(0.45, 0.46, 0.48)
+		cover_visual.size = Vector2(w, h)
+		cover_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cover.add_child(cover_visual)
+
+		# Р¦РµРЅС‚СЂРёСЂРѕРІР°РЅРёРµ cover_visual
+		cover_visual.position = Vector2(-w / 2.0, -h / 2.0)
+
+		# CoverZone (Area2D + CircleShape2D radius 55.0)
+		var cover_zone: Area2D = Area2D.new()
+		cover_zone.name = "CoverZone"
+		var cz_coll: CollisionShape2D = CollisionShape2D.new()
+		cz_coll.shape = CircleShape2D.new()
+		(cz_coll.shape as CircleShape2D).radius = 55.0
+		cover_zone.add_child(cz_coll)
+		cover_zone.set_script(load("res://scripts/components/CoverZone.gd"))
+		cover.add_child(cover_zone)
+
+		cover.position = _pick_free_spot(rng, placed, 110.0)
+		placed.append(cover.position)
+		add_child(cover)
+	# --- РљРћРЎРўР Р« РЎРўРђР›РљР•Р РћР’ (2 С‚РѕС‡РєРё) ---
+	var campfire_count: int = 2
+	for i in range(campfire_count):
+		var campfire: Node2D = Node2D.new()
+		campfire.name = "Campfire_%d" % i
+		campfire.add_to_group("campfires")
+		campfire.add_to_group("mission_cleanup")
+
+		# РљРѕСЃС‚СЂРёС‰Рµ
+		var base_rect: ColorRect = ColorRect.new()
+		base_rect.color = Color(0.12, 0.1, 0.08, 0.95)
+		base_rect.size = Vector2(14.0, 14.0)
+		base_rect.position = Vector2(-7.0, -7.0)
+		base_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		campfire.add_child(base_rect)
+
+		# РџСѓР»СЊСЃРёСЂСѓСЋС‰РёР№ РѕСЂР°РЅР¶РµРІС‹Р№ РѕРіРѕРЅС‘Рє
+		var flame: ColorRect = ColorRect.new()
+		flame.name = "Flame"
+		flame.color = Color(1.0, 0.55, 0.1, 0.95)
+		flame.size = Vector2(8.0, 8.0)
+		flame.position = Vector2(-4.0, -4.0)
+		flame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		campfire.add_child(flame)
+
+		campfire.position = _pick_free_spot(rng, placed, 120.0)
+		placed.append(campfire.position)
+		campfire.set_script(preload("res://scripts/environment/Campfire.gd"))
+		add_child(campfire)
+func _pick_free_spot(rng: RandomNumberGenerator, placed: Array[Vector2], min_dist: float) -> Vector2:
+	for attempt in range(40):
+		var x: float = float(rng.randi_range(420, 1500))
+		var y: float = float(rng.randi_range(160, 920))
+		if absf(y - 540.0) < 105.0:
+			continue
+		var candidate := Vector2(x, y)
+		var ok: bool = true
+		for p in placed:
+			if p.distance_to(candidate) < min_dist:
+				ok = false
+				break
+		if ok:
+			return candidate
+	return Vector2(float(rng.randi_range(420, 1500)), 250.0)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\ui\GameHUD.gd ===
+
+class_name GameHUD
+extends CanvasLayer
+
+var _sp_label: Label
+var _day_night_btn: Button
+var _is_night: bool = false
+var _eco: EconomyManager
+
+const GRENADE_MAX_RANGE: float = 260.0
+const MINE_MAX_RANGE: float = 65.0
+const BUILD_MAX_RANGE: float = 85.0
+
+# Notification popup
+var _notification_label: Label = null
+var _notification_timer: float = 0.0
+
+const _SQUAD_SCRIPT := preload("res://scripts/core/SquadController.gd")
+const _VEHICLE_SCRIPT := preload("res://scripts/units/VehicleUnit.gd")
+const _DRONE_SCRIPT := preload("res://scripts/units/DroneUnit.gd")
+const _MUTANT_SPAWNER_SCRIPT := preload("res://scripts/ai/MutantWaveSpawner.gd")
+
+func _ready() -> void:
+	add_to_group("game_hud")
+	_eco = get_tree().get_first_node_in_group("economy") as EconomyManager
+	if _eco != null:
+		_eco.sp_changed.connect(_on_sp_changed)
+
+	# Top Panel: SP counter + Day/Night toggle
+	var panel := PanelContainer.new()
+	panel.name = "HUDPanel"
+	panel.position = Vector2(10, 10)
+	panel.size = Vector2(200, 80)
+	add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	panel.add_child(vbox)
+
+	_sp_label = Label.new()
+	_sp_label.name = "SPLabel"
+	_sp_label.text = "SP: 200"
+	vbox.add_child(_sp_label)
+
+	_day_night_btn = Button.new()
+	_day_night_btn.name = "DayNightBtn"
+	_day_night_btn.text = "Night"
+	_day_night_btn.size = Vector2(200, 30)
+	_day_night_btn.pressed.connect(_on_day_night_toggled)
+	vbox.add_child(_day_night_btn)
+
+	var speed_hbox := HBoxContainer.new()
+	var pause_btn := Button.new()
+	pause_btn.text = "Pause"
+	pause_btn.size = Vector2(40, 24)
+	pause_btn.pressed.connect(func() -> void: Engine.time_scale = 0.0)
+	speed_hbox.add_child(pause_btn)
+	var btn_1x := Button.new()
+	btn_1x.text = "1x"
+	btn_1x.size = Vector2(40, 24)
+	btn_1x.pressed.connect(func() -> void: Engine.time_scale = 1.0)
+	speed_hbox.add_child(btn_1x)
+	var btn_2x := Button.new()
+	btn_2x.text = "2x"
+	btn_2x.size = Vector2(40, 24)
+	btn_2x.pressed.connect(func() -> void: Engine.time_scale = 2.0)
+	speed_hbox.add_child(btn_2x)
+	vbox.add_child(speed_hbox)
+
+	# Reinforcement panel
+	var rein_panel := HUDReinforcementPanel.new()
+	rein_panel.name = "HUDReinforcementPanel"
+	add_child(rein_panel)
+
+	# Ability panel
+	var abil_panel := HUDAbilityPanel.new()
+	abil_panel.name = "HUDAbilityPanel"
+	add_child(abil_panel)
+
+	_update_sp_label()
+
+	# Debug panel: quick enemy spawn (top right)
+	var debug_panel := PanelContainer.new()
+	debug_panel.name = "EnemyDebugPanel"
+	debug_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	debug_panel.offset_left = -220
+	debug_panel.offset_top = 10
+	debug_panel.offset_right = -10
+	debug_panel.offset_bottom = 175
+	add_child(debug_panel)
+
+	var debug_vbox := VBoxContainer.new()
+	debug_panel.add_child(debug_vbox)
+
+	var debug_label := Label.new()
+	debug_label.text = "[Debug: Spawn Enemy]"
+	debug_vbox.add_child(debug_label)
+
+	var squad_btn := Button.new()
+	squad_btn.text = "+ Enemy: Squad"
+	squad_btn.pressed.connect(_on_debug_spawn_enemy_squad)
+	debug_vbox.add_child(squad_btn)
+
+	var btr_btn := Button.new()
+	btr_btn.text = "+ Enemy: BTR"
+	btr_btn.pressed.connect(_on_debug_spawn_btr)
+	debug_vbox.add_child(btr_btn)
+
+	var dbg_drone_btn := Button.new()
+	dbg_drone_btn.text = "+ Enemy: FPV Drone"
+	dbg_drone_btn.pressed.connect(_on_debug_spawn_fpv_drone)
+	debug_vbox.add_child(dbg_drone_btn)
+
+	var mutant_btn := Button.new()
+	mutant_btn.text = "+ Mutants"
+	mutant_btn.pressed.connect(_on_debug_spawn_mutants)
+	debug_vbox.add_child(mutant_btn)
+
+	var mm: MissionManager = get_parent().get_node_or_null("MissionManager") as MissionManager
+	if mm != null and _day_night_btn != null:
+		_day_night_btn.visible = (mm.mission == MissionManager.Mission.SANDBOX)
+
+func _on_sp_changed(_new_amount: int) -> void:
+	_update_sp_label()
+
+func _update_sp_label() -> void:
+	if _sp_label != null and _eco != null:
+		_sp_label.text = "SP: " + str(_eco.get_sp())
+func _process(delta: float) -> void:
+	if _notification_timer > 0.0:
+		_notification_timer -= delta
+		if _notification_timer <= 0.0 and _notification_label != null:
+			_notification_label.queue_free()
+			_notification_label = null
+
+func _on_day_night_toggled() -> void:
+	set_night(not _is_night)
+
+func set_night(enabled: bool) -> void:
+	var fog: FogOfWarManager = get_tree().get_first_node_in_group("fog_of_war") as FogOfWarManager
+	if fog != null:
+		fog.set_night(enabled)
+	if enabled == _is_night:
+		return
+	var cm: CanvasModulate = get_tree().root.get_node_or_null("CanvasModulate") as CanvasModulate
+	if cm == null:
+		cm = CanvasModulate.new()
+		cm.name = "CanvasModulate"
+		get_tree().root.add_child(cm)
+	if enabled:
+		cm.color = Color(0.25, 0.28, 0.38)
+		_day_night_btn.text = "Day"
+		_is_night = true
+		_reduce_night_ranges()
+	else:
+		cm.color = Color.WHITE
+		_day_night_btn.text = "Night"
+		_is_night = false
+		_restore_daylight_ranges()
+
+func _restore_daylight_ranges() -> void:
+	var squads: Array = get_tree().get_nodes_in_group("player_squads")
+	for squad in squads:
+		var soldiers: Array = squad.get("soldiers")
+		if soldiers == null:
+			continue
+		for soldier in soldiers:
+			if is_instance_valid(soldier):
+				var weapon: WeaponComponent = soldier.get_node_or_null("WeaponComponent") as WeaponComponent
+				if weapon != null and weapon.has_meta("base_attack_range"):
+					weapon.attack_range = float(weapon.get_meta("base_attack_range"))
+
+func _reduce_night_ranges() -> void:
+	var squads: Array = get_tree().get_nodes_in_group("player_squads")
+	for squad in squads:
+		var soldiers: Array = squad.get("soldiers")
+		if soldiers == null:
+			continue
+		for soldier in soldiers:
+			if is_instance_valid(soldier):
+				var weapon: WeaponComponent = soldier.get_node_or_null("WeaponComponent") as WeaponComponent
+				if weapon != null:
+					if not weapon.has_meta("base_attack_range"):
+						weapon.set_meta("base_attack_range", weapon.attack_range)
+					weapon.attack_range = float(weapon.get_meta("base_attack_range")) * 0.5
+
+func _show_notification(text: String) -> void:
+	if _notification_label != null:
+		_notification_label.queue_free()
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	_notification_label = Label.new()
+	_notification_label.text = text
+	_notification_label.position = Vector2(viewport_size.x / 2.0 - 100.0, 20.0)
+	_notification_label.size = Vector2(200.0, 30.0)
+	_notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_notification_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_notification_label)
+	_notification_timer = 2.0
+
+func _on_debug_spawn_enemy_squad() -> void:
+	var squad: SquadController = _SQUAD_SCRIPT.new()
+	squad.name = "EnemySquad_Debug"
+	squad.position = Vector2(950, 380)
+	squad.add_to_group("enemy_squads")
+
+	for i in range(3):
+		var soldier: Soldier = Soldier.new()
+		soldier.name = "EnemySoldier_" + str(i)
+		soldier.position = Vector2(i * 20 - 20, 0)
+
+		var nav := NavigationAgent2D.new()
+		nav.name = "NavigationAgent2D"
+		soldier.add_child(nav)
+
+		var cs := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = 6.0
+		cs.shape = circle
+		soldier.add_child(cs)
+
+		var rect := ColorRect.new()
+		rect.size = Vector2(16.0, 16.0)
+		rect.position = Vector2(-8.0, -8.0)
+		rect.color = Color.RED
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		soldier.add_child(rect)
+
+		squad.add_child(soldier)
+		soldier.add_to_group("enemy_units")
+
+	get_parent().add_child(squad)
+	squad.move_squad(Vector2(550, 400))
+
+func _on_debug_spawn_btr() -> void:
+	var v: VehicleUnit = _VEHICLE_SCRIPT.new()
+	v.name = "EnemyBTR_Debug"
+	v.position = Vector2(980, 440)
+	v.is_enemy = true
+	get_parent().add_child(v)
+	v.set_destination(Vector2(550, 400))
+
+func _on_debug_spawn_fpv_drone() -> void:
+	var d: DroneUnit = _DRONE_SCRIPT.new()
+	d.name = "EnemyFPVDrone_Debug"
+	d.position = Vector2(1000, 350)
+	d.drone_type = DroneUnit.DroneType.FPV_KAMIKAZE
+	d.is_enemy = true
+	get_parent().add_child(d)
+
+func _on_debug_spawn_mutants() -> void:
+	var spawner: MutantWaveSpawner = null
+	for node in get_tree().get_nodes_in_group("mutant_spawner"):
+		if node is MutantWaveSpawner:
+			spawner = node
+			break
+	if spawner == null:
+		spawner = _MUTANT_SPAWNER_SCRIPT.new()
+		spawner.name = "MutantWaveSpawner_Debug"
+		get_parent().add_child(spawner)
+	spawner._spawn_wave()
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_SPACE and event.pressed:
+		var selected: Node2D = _get_selected_squad()
+		if selected != null and selected is Node2D:
+			var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
+			if cam != null:
+				var soldiers: Array = []
+				if selected is SquadController:
+					soldiers = (selected as SquadController).soldiers
+				if soldiers != null and not soldiers.is_empty():
+					var center: Vector2 = Vector2.ZERO
+					var count: int = 0
+					for s in soldiers:
+						if is_instance_valid(s) and s is Node2D:
+							center += (s as Node2D).global_position
+							count += 1
+					if count > 0:
+						center /= float(count)
+						cam.position = center
+		get_viewport().set_input_as_handled()
+		return
+
+func _get_selected_squad() -> Node2D:
+	var sel_mgr: Node = get_tree().current_scene.get_node_or_null("SelectionManager")
+	if sel_mgr != null:
+		var selected: Array = sel_mgr.get("selected_squads")
+		if selected != null and selected.size() > 0 and is_instance_valid(selected[0]):
+			return selected[0] as Node2D
+	return null
+
+func _exit_tree() -> void:
+	Engine.time_scale = 1.0
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\ui\HUDAbilityPanel.gd ===
+
+class_name HUDAbilityPanel
+extends PanelContainer
+
+const GRENADE_MAX_RANGE: float = 260.0
+const MINE_MAX_RANGE: float = 65.0
+const BUILD_MAX_RANGE: float = 85.0
+
+const TAU: float = 2 * PI
+
+
+var _eco: EconomyManager
+
+# Ability panel state
+var _mine_mode: bool = false
+var _artillery_mode: bool = false
+var _grenade_mode: bool = false
+var _flare_mode: bool = false
+
+
+# Build fort state
+var _build_fort_type: int = -1
+var _build_anchor_set: bool = false
+var _build_anchor_pos: Vector2 = Vector2.ZERO
+var _build_rotation: float = 0.0
+
+# Aim overlay
+var _aim_overlay: Node2D = null
+
+# UI refs
+var _abil_label: Label = null
+var _mine_btn: Button = null
+var _sandbag_btn: Button = null
+var _barbed_btn: Button = null
+var _turret_btn: Button = null
+var _arty_btn: Button = null
+var _grenade_btn: Button = null
+var _flashlight_btn: Button = null
+var _nvg_btn: Button = null
+var _cancel_mode_btn: Button = null
+
+# Formation names (English)
+var formation_names: Array = ["Line", "Column", "Wedge", "Spread"]
+var formation_tooltips: Array = [
+	"Rifle chain facing target",
+	"Single file along the road",
+	"Wedge forward",
+	"Skirmish order",
+]
+
+func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	_eco = get_tree().get_first_node_in_group("economy") as EconomyManager
+	name = "AbilityPanel"
+	position = Vector2(10, 100)
+	size = Vector2(260, 105)
+	visible = false
+
+	var vbox := VBoxContainer.new()
+	add_child(vbox)
+
+	_abil_label = Label.new()
+	_abil_label.text = "Squad abilities:"
+	vbox.add_child(_abil_label)
+
+	# First row: abilities
+	var abil_hbox := HBoxContainer.new()
+	vbox.add_child(abil_hbox)
+
+	_mine_btn = _make_btn("Mine (40 SP)", "Place mine (requires sapper)", _on_place_mine)
+	abil_hbox.add_child(_mine_btn)
+
+	_sandbag_btn = _make_btn("Sandbags (35 SP)", "Build sandbags (cover)", _build_sandbags)
+	abil_hbox.add_child(_sandbag_btn)
+
+	_barbed_btn = _make_btn("Barbed Wire (25 SP)", "Build barbed wire (slow)", _build_barbed)
+	abil_hbox.add_child(_barbed_btn)
+
+	_turret_btn = _make_btn("Turret (110 SP)", "Build auto-turret", _build_turret)
+	abil_hbox.add_child(_turret_btn)
+
+	_arty_btn = _make_btn("Artillery (100 SP)", "Artillery strike on area", _on_artillery_strike)
+	abil_hbox.add_child(_arty_btn)
+
+	_grenade_btn = _make_btn("Grenade (30 SP)", "Throw grenade", _on_grenade)
+	abil_hbox.add_child(_grenade_btn)
+
+	_flashlight_btn = _make_btn("Flashlight", "Toggle squad flashlight", _on_flashlight_toggle)
+	abil_hbox.add_child(_flashlight_btn)
+
+	_nvg_btn = _make_btn("NVG (60 SP)", "Buy NVG for squad", _on_nvg)
+	abil_hbox.add_child(_nvg_btn)
+
+	_cancel_mode_btn = _make_btn("Cancel", "Cancel current build mode", _on_cancel_mode_pressed)
+	_cancel_mode_btn.visible = false
+	abil_hbox.add_child(_cancel_mode_btn)
+
+	# Second row: tactical commands
+	var tac_hbox := HBoxContainer.new()
+	vbox.add_child(tac_hbox)
+
+	var attack_move_btn := Button.new()
+	attack_move_btn.text = "Attack (Q)"
+	attack_move_btn.tooltip_text = "Attack-move: units go to point and attack enemies on the way"
+	attack_move_btn.pressed.connect(func() -> void:
+		var sm: Node = get_tree().current_scene.get_node_or_null("SelectionManager")
+		if sm != null:
+			sm.set("attack_move_mode", true)
+			_show_notification("Attack-move: click RMB")
+	)
+	tac_hbox.add_child(attack_move_btn)
+
+	var hold_btn := Button.new()
+	hold_btn.text = "Hold (H)"
+	hold_btn.tooltip_text = "Stop selected squads and hold position"
+	hold_btn.pressed.connect(func() -> void:
+		var sm: Node = get_tree().current_scene.get_node_or_null("SelectionManager")
+		if sm != null and sm.has_method("issue_hold"):
+			sm.call("issue_hold")
+	)
+	tac_hbox.add_child(hold_btn)
+
+	var retreat_btn := Button.new()
+	retreat_btn.text = "Retreat (R)"
+	retreat_btn.tooltip_text = "Retreat to nearest friendly point or base"
+	retreat_btn.pressed.connect(func() -> void:
+		var sm: Node = get_tree().current_scene.get_node_or_null("SelectionManager")
+		if sm != null and sm.has_method("issue_retreat"):
+			sm.call("issue_retreat")
+	)
+	tac_hbox.add_child(retreat_btn)
+
+	# Third row: formations
+	var form_hbox := HBoxContainer.new()
+	vbox.add_child(form_hbox)
+
+	for i in range(4):
+		var fbtn := Button.new()
+		fbtn.text = formation_names[i]
+		fbtn.tooltip_text = formation_tooltips[i]
+		fbtn.pressed.connect(Callable(self, "_on_formation_selected").bind(i))
+		form_hbox.add_child(fbtn)
+
+	_aim_overlay = Node2D.new()
+	_aim_overlay.name = "AimOverlay"
+	_aim_overlay.z_index = 95
+	_aim_overlay.draw.connect(_on_aim_overlay_draw)
+	_aim_overlay.add_to_group("mission_cleanup")
+	get_tree().current_scene.call_deferred("add_child", _aim_overlay)
+
+func _on_formation_selected(formation_index: int) -> void:
+	var sm: Node = get_tree().current_scene.get_node_or_null("SelectionManager")
+	if sm != null:
+		for squad in sm.selected_squads:
+			if is_instance_valid(squad) and squad.has_method("set_formation"):
+				squad.call("set_formation", formation_index)
+		_show_notification("Formation: " + formation_names[formation_index])
+		
+func _build_sandbags() -> void:
+	if _eco != null and _eco.get_sp() >= 35:
+		_build_fort_type = FieldFortification.FortType.SANDBAGS
+	else:
+		_show_notification("Not enough SP")
+
+func _build_barbed() -> void:
+	if _eco != null and _eco.get_sp() >= 25:
+		_build_fort_type = FieldFortification.FortType.BARBED_WIRE
+	else:
+		_show_notification("Not enough SP")
+
+func _build_turret() -> void:
+	if _eco != null and _eco.get_sp() >= 110:
+		_build_fort_type = FieldFortification.FortType.AUTO_TURRET
+	else:
+		_show_notification("Not enough SP")
+
+func _on_place_mine() -> void:
+	var target_squad: Node2D = _get_selected_squad()
+	if target_squad == null:
+		_show_notification("First select a squad!")
+		return
+	var spec: SpecialistComponent = target_squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
+	if spec == null or spec.specialist_type != SpecialistComponent.Type.SAPPER:
+		_show_notification("Squad must have a sapper!")
+		return
+	if _eco != null and _eco.get_sp() >= 40:
+		_mine_mode = true
+		_artillery_mode = false
+		_grenade_mode = false
+		_flare_mode = false
+
+func _on_artillery_strike() -> void:
+	var target_squad: Node2D = _get_selected_squad()
+	if target_squad == null:
+		_show_notification("First select a squad!")
+		return
+	var spec: SpecialistComponent = target_squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
+	if spec == null or spec.specialist_type != SpecialistComponent.Type.RADIO:
+		_show_notification("Squad must have a radio operator!")
+		return
+	if _eco != null and _eco.spend_sp(100):
+		_artillery_mode = true
+		_mine_mode = false
+		_grenade_mode = false
+		_flare_mode = false
+
+func _on_grenade() -> void:
+	if _eco != null and _eco.get_sp() >= 30:
+		_grenade_mode = true
+		_mine_mode = false
+		_artillery_mode = false
+		_flare_mode = false
+
+func enable_flare_mode() -> void:
+	if _eco != null and _eco.spend_sp(30):
+		_flare_mode = true
+		_mine_mode = false
+		_artillery_mode = false
+		_grenade_mode = false
+
+func _on_flashlight_toggle() -> void:
+	var squad: Node2D = _get_selected_squad()
+	if squad == null:
+		return
+	var soldiers: Array = squad.get("soldiers")
+	if soldiers == null or soldiers.is_empty():
+		return
+	var has_rookie_without_nvg: bool = false
+	for s in soldiers:
+		if not is_instance_valid(s):
+			continue
+		var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+		var rank: int = vc.rank if vc != null else VeterancyComponent.Rank.ROOKIE
+		if not bool(s.get("has_nvg")) and rank == VeterancyComponent.Rank.ROOKIE:
+			has_rookie_without_nvg = true
+			break
+	if not has_rookie_without_nvg:
+		_show_notification("Squad has NVG/thermal - flashlight not needed")
+		return
+	var new_state: bool = true
+	if is_instance_valid(soldiers[0]):
+		new_state = not bool(soldiers[0].get("flashlight_on"))
+	for s in soldiers:
+		if is_instance_valid(s):
+			s.set("flashlight_on", new_state)
+
+func _on_nvg() -> void:
+	var squad: Node2D = _get_selected_squad()
+	if squad == null:
+		_show_notification("First select a squad!")
+		return
+	var soldiers: Array = squad.get("soldiers")
+	if soldiers == null or soldiers.is_empty():
+		return
+	var all_have_nvg_or_veteran: bool = true
+	for s in soldiers:
+		if not is_instance_valid(s):
+			continue
+		var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+		var rank: int = vc.rank if vc != null else VeterancyComponent.Rank.ROOKIE
+		if not bool(s.get("has_nvg")) and rank < VeterancyComponent.Rank.VETERAN:
+			all_have_nvg_or_veteran = false
+			break
+	if all_have_nvg_or_veteran:
+		_show_notification("Squad already equipped with NVG or veterans!")
+		return
+	if _eco != null and _eco.spend_sp(60):
+		for s in soldiers:
+			if is_instance_valid(s):
+				s.set("has_nvg", true)
+				s.set("flashlight_on", false)
+		_show_notification("NVG issued to squad!")
+	else:
+		_show_notification("Not enough SP")
+
+func _on_aim_overlay_draw() -> void:
+	var selected: Node2D = _get_selected_squad()
+	if selected == null:
+		return
+	var soldiers: Array = []
+	if selected is SquadController:
+		soldiers = (selected as SquadController).soldiers
+	if soldiers == null:
+		return
+	var center: Vector2 = Vector2.ZERO
+	var count: int = 0
+	for s in soldiers:
+		if is_instance_valid(s) and s is Node2D:
+			center += (s as Node2D).global_position
+			count += 1
+	if count == 0:
+		return
+	center /= float(count)
+	var mouse_world: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * get_viewport().get_mouse_position()
+	if _build_fort_type >= 0:
+		if _build_anchor_set == false:
+			var b_in_range: bool = center.distance_to(mouse_world) <= BUILD_MAX_RANGE
+			var b_color: Color = Color(0.2, 1.0, 0.3, 0.45) if b_in_range else Color(1.0, 0.2, 0.2, 0.45)
+			_aim_overlay.draw_arc(center, BUILD_MAX_RANGE, 0.0, TAU, 48, Color(0.9, 0.9, 0.9, 0.5), 1.5)
+			_aim_overlay.draw_line(center, mouse_world, b_color, 1.5)
+			_aim_overlay.draw_circle(mouse_world, 8.0, b_color)
+		else:
+			_build_rotation = (mouse_world - _build_anchor_pos).angle() + PI / 2.0
+			_aim_overlay.draw_line(_build_anchor_pos, mouse_world, Color(0.9, 0.9, 0.2, 0.7), 2.0)
+			var fort_size: Vector2 = Vector2(48.0, 16.0)
+			match _build_fort_type:
+				FieldFortification.FortType.SANDBAGS: fort_size = Vector2(48.0, 16.0)
+				FieldFortification.FortType.BARBED_WIRE: fort_size = Vector2(56.0, 14.0)
+				FieldFortification.FortType.AUTO_TURRET: fort_size = Vector2(22.0, 22.0)
+			_aim_overlay.draw_set_transform(_build_anchor_pos, _build_rotation, Vector2.ONE)
+			_aim_overlay.draw_rect(Rect2(-fort_size / 2.0, fort_size), Color(0.2, 1.0, 0.3, 0.65), false, 2.0)
+			_aim_overlay.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
+	if not _grenade_mode and not _mine_mode:
+		return
+	var max_r: float = GRENADE_MAX_RANGE if _grenade_mode else MINE_MAX_RANGE
+	var aoe_r: float = 50.0 if _grenade_mode else 25.0
+	var in_range: bool = center.distance_to(mouse_world) <= max_r
+	var color: Color = Color(0.2, 1.0, 0.3, 0.45) if in_range else Color(1.0, 0.2, 0.2, 0.45)
+	_aim_overlay.draw_arc(center, max_r, 0.0, TAU, 48, Color(0.9, 0.9, 0.9, 0.5), 1.5)
+	_aim_overlay.draw_line(center, mouse_world, color, 1.5)
+	_aim_overlay.draw_circle(mouse_world, aoe_r, color)
+
+func _get_selected_squad() -> Node2D:
+	var sel_mgr: Node = get_tree().current_scene.get_node_or_null("SelectionManager")
+	if sel_mgr != null:
+		var selected: Array = sel_mgr.get("selected_squads")
+		if selected != null and selected.size() > 0 and is_instance_valid(selected[0]):
+			return selected[0] as Node2D
+	return null
+
+func _show_notification(text: String) -> void:
+	var hud: Node = get_tree().get_first_node_in_group("game_hud")
+	if hud != null and hud.has_method("_show_notification"):
+		hud.call("_show_notification", text)
+
+func _on_cancel_mode_pressed() -> void:
+	_mine_mode = false
+	_grenade_mode = false
+	_artillery_mode = false
+	_flare_mode = false
+	_build_fort_type = -1
+	_build_anchor_set = false
+
+func _make_btn(text: String, tooltip: String, callable: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.tooltip_text = tooltip
+	btn.pressed.connect(callable)
+	return btn
+
+func _process(_delta: float) -> void:
+	if _aim_overlay != null:
+		_aim_overlay.queue_redraw()
+
+	var squad: Node2D = _get_selected_squad()
+	if squad == null:
+		visible = false
+		return
+	visible = true
+
+	if _cancel_mode_btn != null:
+		_cancel_mode_btn.visible = (_mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0)
+
+	var spec: SpecialistComponent = squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
+	if _mine_btn != null:
+		_mine_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER)
+		if _sandbag_btn != null:
+			_sandbag_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER)
+		if _barbed_btn != null:
+			_barbed_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER)
+		if _turret_btn != null:
+			_turret_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER)
+	if _arty_btn != null:
+		_arty_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.RADIO)
+
+	var soldiers: Array = squad.get("soldiers")
+	if _flashlight_btn != null and squad != null:
+		if soldiers != null and soldiers.size() > 0 and is_instance_valid(soldiers[0]):
+			var on: bool = bool(soldiers[0].get("flashlight_on"))
+			_flashlight_btn.text = "Flashlight: " + ("ON" if on else "OFF")
+
+	if _nvg_btn != null:
+		var any_need_nvg: bool = false
+		for s in soldiers:
+			if not is_instance_valid(s):
+				continue
+			var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+			var rank: int = vc.rank if vc != null else VeterancyComponent.Rank.ROOKIE
+			if not bool(s.get("has_nvg")) and rank < VeterancyComponent.Rank.VETERAN:
+				any_need_nvg = true
+				break
+		_nvg_btn.visible = any_need_nvg
+
+func _exit_tree() -> void:
+	if _aim_overlay != null and is_instance_valid(_aim_overlay):
+		_aim_overlay.queue_free()
+		_aim_overlay = null
+
+
+func _input(event: InputEvent) -> void:
+	if get_viewport().gui_get_hovered_control() != null:
+		return
+	# Cancel any active mode on Esc
+	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed:
+		if _build_anchor_set:
+			_build_anchor_set = false
+			get_viewport().set_input_as_handled()
+			return
+		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0:
+			_mine_mode = false
+			_grenade_mode = false
+			_artillery_mode = false
+			_flare_mode = false
+			_build_fort_type = -1
+			_build_anchor_set = false
+			get_viewport().set_input_as_handled()
+			return
+	# Cancel on RMB
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		if _build_anchor_set:
+			_build_anchor_set = false
+			get_viewport().set_input_as_handled()
+			return
+		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0:
+			_mine_mode = false
+			_grenade_mode = false
+			_artillery_mode = false
+			_flare_mode = false
+			_build_fort_type = -1
+			_build_anchor_set = false
+			get_viewport().set_input_as_handled()
+			return
+	# Hotkey G for grenade
+	if event is InputEventKey and event.keycode == KEY_G and event.pressed:
+		if not _grenade_mode:
+			if _eco != null and _eco.get_sp() >= 30:
+				_grenade_mode = true
+				_mine_mode = false
+				_artillery_mode = false
+				_flare_mode = false
+			else:
+				_show_notification("Not enough SP")
+		else:
+			_grenade_mode = false
+	# Hotkey L for flashlight toggle
+	if event is InputEventKey and event.keycode == KEY_L and event.pressed:
+		_on_flashlight_toggle()
+	# LMB click handling for all modes
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		var world_pos: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * event.position
+		if _flare_mode:
+			_flare_mode = false
+			if _eco != null and _eco.spend_sp(30):
+				var fog: FogOfWarManager = get_tree().get_first_node_in_group("fog_of_war") as FogOfWarManager
+				if fog != null:
+					fog.add_flare(world_pos, 420.0, 15.0)
+			else:
+				_show_notification("Not enough SP")
+			get_viewport().set_input_as_handled()
+			return
+		if _mine_mode:
+			_mine_mode = false
+			get_viewport().set_input_as_handled()
+			var selected: Node2D = _get_selected_squad()
+			if selected != null:
+				var soldiers: Array = []
+				if selected is SquadController:
+					soldiers = (selected as SquadController).soldiers
+				var center: Vector2 = Vector2.ZERO
+				var count: int = 0
+				for s in soldiers:
+					if is_instance_valid(s) and s is Node2D:
+						center += (s as Node2D).global_position
+						count += 1
+				if count > 0:
+					center /= float(count)
+					if center.distance_to(world_pos) > MINE_MAX_RANGE:
+						_show_notification("Too far!")
+						return
+				var spec: SpecialistComponent = selected.get_node_or_null("SpecialistComponent") as SpecialistComponent
+				if spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER:
+					if _eco != null and _eco.spend_sp(40):
+						spec.place_mine(world_pos)
+					else:
+						_show_notification("Not enough SP")
+			return
+		if _artillery_mode:
+			_artillery_mode = false
+			_aoe_damage(world_pos, 100.0, 80)
+		if _grenade_mode:
+			_grenade_mode = false
+			get_viewport().set_input_as_handled()
+			var selected: Node2D = _get_selected_squad()
+			if selected != null:
+				var soldiers: Array = []
+				if selected is SquadController:
+					soldiers = (selected as SquadController).soldiers
+				var center: Vector2 = Vector2.ZERO
+				var count: int = 0
+				for s in soldiers:
+					if is_instance_valid(s) and s is Node2D:
+						center += (s as Node2D).global_position
+						count += 1
+				if count > 0:
+					center /= float(count)
+					if center.distance_to(world_pos) > GRENADE_MAX_RANGE:
+						_show_notification("Too far!")
+						return
+				if _eco != null and _eco.spend_sp(30):
+					_aoe_damage(world_pos, 50.0, 60)
+				else:
+					_show_notification("Not enough SP")
+			return
+		if _build_fort_type >= 0:
+			get_viewport().set_input_as_handled()
+			var selected: Node2D = _get_selected_squad()
+			if selected == null:
+				_build_fort_type = -1
+				_build_anchor_set = false
+				return
+			if not _build_anchor_set:
+				var soldiers: Array = []
+				if selected is SquadController:
+					soldiers = (selected as SquadController).soldiers
+				var center: Vector2 = Vector2.ZERO
+				var count: int = 0
+				for s in soldiers:
+					if is_instance_valid(s) and s is Node2D:
+						center += (s as Node2D).global_position
+						count += 1
+				if count > 0:
+					center /= float(count)
+					if center.distance_to(world_pos) > BUILD_MAX_RANGE:
+						_show_notification("Too far!")
+						return
+				_build_anchor_pos = world_pos
+				_build_anchor_set = true
+				_build_rotation = 0.0
+				_show_notification("Rotate with mouse & click LMB")
+			else:
+				var fort_type: int = _build_fort_type
+				_build_fort_type = -1
+				_build_anchor_set = false
+				var spec: SpecialistComponent = selected.get_node_or_null("SpecialistComponent") as SpecialistComponent
+				if spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER:
+					var cost: int = 0
+					match fort_type:
+						FieldFortification.FortType.SANDBAGS:
+							cost = 35
+						FieldFortification.FortType.BARBED_WIRE:
+							cost = 25
+						FieldFortification.FortType.AUTO_TURRET:
+							cost = 110
+					if _eco != null and _eco.spend_sp(cost):
+						spec.build_fortification(_build_anchor_pos, fort_type, _build_rotation)
+					else:
+						_show_notification("Not enough SP")
+func _aoe_damage(center: Vector2, radius: float, damage: int) -> void:
+	var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
+	if cam != null and cam.has_method("shake"):
+		cam.call("shake", 10.0, 0.3)
+	var flash: ColorRect = ColorRect.new()
+	flash.size = Vector2(radius * 2.0, radius * 2.0)
+	flash.position = center - Vector2(radius, radius)
+	flash.color = Color(1.0, 0.5, 0.0, 0.7)
+	flash.z_index = 50
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.name = "AOEFlash"
+	flash.add_to_group("mission_cleanup")
+	get_tree().current_scene.add_child(flash)
+	var tween := create_tween()
+	tween.tween_property(flash, "color:a", 0.0, 0.3)
+	tween.tween_callback(flash.queue_free)
+	var crater := ColorRect.new()
+	crater.size = Vector2(radius * 0.9, radius * 0.9)
+	crater.position = center - Vector2(radius * 0.45, radius * 0.45)
+	crater.color = Color(0.08, 0.07, 0.06, 0.55)
+	crater.z_index = 1
+	crater.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crater.add_to_group("mission_cleanup")
+	get_tree().current_scene.add_child(crater)
+	var targets: Array = []
+	targets.append_array(get_tree().get_nodes_in_group("enemy_units"))
+	targets.append_array(get_tree().get_nodes_in_group("enemy_vehicles"))
+	targets.append_array(get_tree().get_nodes_in_group("enemy_drones"))
+	var hit_targets: Array[Node] = []
+	for obj in targets:
+		if obj not in hit_targets:
+			hit_targets.append(obj)
+	for obj in hit_targets:
+		if is_instance_valid(obj) and obj is Node2D:
+			if center.distance_to(obj.global_position) <= radius:
+				if obj is VehicleUnit:
+					(obj as VehicleUnit).take_damage(damage, true)
+				else:
+					var health: HealthComponent = obj.get_node_or_null("HealthComponent") as HealthComponent
+					if health != null:
+						health.take_damage(damage)
+					elif obj.has_method("take_damage"):
+						obj.take_damage(damage)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\ui\HUDReinforcementPanel.gd ===
+
+class_name HUDReinforcementPanel
+extends Control
+
+const _SQUAD_SCRIPT := preload("res://scripts/core/SquadController.gd")
+const _VEHICLE_SCRIPT := preload("res://scripts/units/VehicleUnit.gd")
+const _DRONE_SCRIPT := preload("res://scripts/units/DroneUnit.gd")
+const _SPECIALIST_SCRIPT := preload("res://scripts/components/SpecialistComponent.gd")
+
+const COST_INFANTRY: int = 100
+const COST_VETERAN: int = 220
+const COST_SAPPER: int = 80
+const COST_MEDIC: int = 80
+const COST_RADIO: int = 90
+const COST_AT: int = 140
+const COST_VEHICLE: int = 250
+const COST_DRONE: int = 75
+const COST_EW: int = 220
+const COST_FLARE: int = 30
+
+var _eco: EconomyManager
+var _grid: GridContainer
+
+var _infantry_btn: Button
+var _veteran_btn: Button
+var _sapper_btn: Button
+var _medic_btn: Button
+var _radio_btn: Button
+var _at_btn: Button
+var _vehicle_btn: Button
+var _drone_btn: Button
+var _ew_btn: Button
+var _flare_btn: Button
+
+
+
+
+func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_eco = get_tree().get_first_node_in_group("economy") as EconomyManager
+	_grid = GridContainer.new()
+	_grid.columns = 5
+	var vp_height: float = get_viewport().get_visible_rect().size.y
+	if vp_height <= 0.0:
+		vp_height = 1080.0
+	_grid.position = Vector2(10.0, vp_height - 95.0)
+	add_child(_grid)
+
+	_infantry_btn = _make_btn("Infantry (100 SP)", "Hire cheap 3-man recruit squad", _on_infantry)
+	_veteran_btn = _make_btn("Veterans (220 SP)", "Experienced squad with better aim and morale", _on_veteran_squad)
+	_sapper_btn = _make_btn("Sapper (80 SP)", "Sapper: mines, wire, anomaly disarming", _on_sapper)
+	_medic_btn = _make_btn("Medic (80 SP)", "Attach medic to selected squad", _on_medic)
+	_radio_btn = _make_btn("Radio (90 SP)", "Radio operator: artillery, smoke, extended range", _on_radio)
+	_at_btn = _make_btn("AT Squad (140 SP)", "Squad with anti-tank weapons against vehicles", _on_at)
+	_vehicle_btn = _make_btn("APC (250 SP)", "Armored vehicle with machinegun", _on_vehicle)
+	_drone_btn = _make_btn("FPV Drone (75 SP)", "FPV kamikaze: high-speed suicide drone", _on_drone)
+	_ew_btn = _make_btn("EW Station (220 SP)", "Electronic warfare jammer vehicle", _on_ew_station)
+	_flare_btn = _make_btn("Flare (30 SP)", "Illuminate area at night", _on_flare)
+
+func _make_btn(text: String, tooltip: String, callable: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.tooltip_text = tooltip
+	btn.pressed.connect(callable)
+	_grid.add_child(btn)
+	return btn
+
+func _on_infantry() -> void:
+	if _eco != null and _eco.spend_sp(COST_INFANTRY):
+		_spawn_soldier_squad(3)
+
+func _on_veteran_squad() -> void:
+	if _eco != null and _eco.spend_sp(COST_VETERAN):
+		_spawn_veteran_squad()
+
+func _on_sapper() -> void:
+	var target_squad: Node2D = _get_selected_squad()
+	if not _can_add_specialist(target_squad):
+		return
+	if _eco != null and _eco.spend_sp(COST_SAPPER):
+		_attach_specialist_to_selected(SpecialistComponent.Type.SAPPER)
+
+func _on_medic() -> void:
+	var target_squad: Node2D = _get_selected_squad()
+	if not _can_add_specialist(target_squad):
+		return
+	if _eco != null and _eco.spend_sp(COST_MEDIC):
+		_attach_specialist_to_selected(SpecialistComponent.Type.MEDIC)
+
+func _on_radio() -> void:
+	var target_squad: Node2D = _get_selected_squad()
+	if not _can_add_specialist(target_squad):
+		return
+	if _eco != null and _eco.spend_sp(COST_RADIO):
+		_attach_specialist_to_selected(SpecialistComponent.Type.RADIO)
+
+func _on_at() -> void:
+	if _eco != null and _eco.spend_sp(COST_AT):
+		_spawn_at_squad()
+
+func _on_vehicle() -> void:
+	if _eco != null and _eco.spend_sp(COST_VEHICLE):
+		_spawn_vehicle()
+
+func _on_drone() -> void:
+	if _eco != null and _eco.spend_sp(COST_DRONE):
+		_spawn_drone()
+
+func _on_ew_station() -> void:
+	if _eco != null and _eco.spend_sp(COST_EW):
+		_spawn_ew_vehicle()
+
+func _on_flare() -> void:
+	var ability_panel: HUDAbilityPanel = get_parent().get_node_or_null("HUDAbilityPanel") as HUDAbilityPanel
+	if ability_panel != null:
+		ability_panel.enable_flare_mode()
+	else:
+		var ability_panel2: HUDAbilityPanel = get_tree().current_scene.find_child("HUDAbilityPanel", true, false) as HUDAbilityPanel
+		if ability_panel2 != null:
+			ability_panel2.enable_flare_mode()
+		else:
+			_show_notification("Click on map for rocket")
+
+
+func _get_selected_squad() -> Node2D:
+	var sel_mgr: Node = get_tree().current_scene.get_node_or_null("SelectionManager")
+	if sel_mgr != null:
+		var selected: Array = sel_mgr.get("selected_squads")
+		if selected != null and selected.size() > 0 and is_instance_valid(selected[0]):
+			return selected[0] as Node2D
+	return null
+
+func _can_add_specialist(target_squad: Node2D) -> bool:
+	if target_squad == null:
+		_show_notification("First select a squad!")
+		return false
+	var spec: SpecialistComponent = target_squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
+	if spec != null and spec.specialist_type != SpecialistComponent.Type.NONE:
+		_show_notification("Squad already has a specialist!")
+		return false
+	return true
+
+func _attach_specialist_to_selected(spec_type: int) -> void:
+	var target_squad: Node2D = _get_selected_squad()
+	if target_squad == null:
+		_show_notification("First select a squad!")
+		return
+	var spec: SpecialistComponent = target_squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
+	if spec != null and spec.specialist_type != SpecialistComponent.Type.NONE:
+		_show_notification("Squad already has a specialist!")
+		return
+	if spec == null:
+		spec = SpecialistComponent.new()
+		spec.name = "SpecialistComponent"
+		target_squad.add_child(spec)
+	spec.specialist_type = spec_type
+	spec._ready()
+	var type_name: String = "Specialist"
+	match spec_type:
+		SpecialistComponent.Type.MEDIC: type_name = "Medic"
+		SpecialistComponent.Type.SAPPER: type_name = "Sapper"
+		SpecialistComponent.Type.RADIO: type_name = "Radio"
+	_show_notification(type_name + " added to squad!")
+
+func _show_notification(text: String) -> void:
+	var hud: Node = get_tree().get_first_node_in_group("game_hud")
+	if hud != null and hud.has_method("_show_notification"):
+		hud.call("_show_notification", text)
+
+func _get_free_spawn_pos(origin: Vector2 = Vector2(200.0, 400.0)) -> Vector2:
+	var groups_to_check: Array[String] = ["player_units", "player_vehicles", "player_drones"]
+	for attempt in range(50):
+		var dx: int = (attempt % 7) - 3
+		var dy: int = int(float(attempt) / 7.0) - 3
+		var candidate: Vector2 = origin + Vector2(dx * 65.0, dy * 65.0)
+		if candidate.x < 60.0 or candidate.x > 1860.0 or candidate.y < 60.0 or candidate.y > 1020.0:
+			continue
+		var overlap: bool = false
+		for g in groups_to_check:
+			for node in get_tree().get_nodes_in_group(g):
+				if is_instance_valid(node) and node is Node2D:
+					if (node as Node2D).global_position.distance_to(candidate) < 60.0:
+						overlap = true
+						break
+			if overlap:
+				break
+		if not overlap:
+			return candidate
+	return origin
+
+func _spawn_soldier_squad(count: int) -> void:
+	var squad = _SQUAD_SCRIPT.new()
+	squad.position = _get_free_spawn_pos()
+	for i in range(count):
+		var soldier := Soldier.new()
+		soldier.name = "Soldier_" + str(i)
+		soldier.position = Vector2(i * 24 - 24, 0)
+		var nav := NavigationAgent2D.new()
+		nav.name = "NavigationAgent2D"
+		soldier.add_child(nav)
+		var cs := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = 6.0
+		cs.shape = circle
+		soldier.add_child(cs)
+		var rect := ColorRect.new()
+		rect.size = Vector2(16.0, 16.0)
+		rect.position = Vector2(-8.0, -8.0)
+		rect.color = Color.BLUE
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		soldier.add_child(rect)
+		squad.add_child(soldier)
+		soldier.add_to_group("player_units")
+	get_tree().current_scene.call_deferred("add_child", squad)
+
+func _spawn_veteran_squad() -> void:
+	var squad = _SQUAD_SCRIPT.new()
+	squad.position = _get_free_spawn_pos()
+	for i in range(3):
+		var soldier := Soldier.new()
+		soldier.name = "VetSoldier_" + str(i)
+		soldier.position = Vector2(i * 24 - 24, 0)
+		var nav := NavigationAgent2D.new()
+		nav.name = "NavigationAgent2D"
+		soldier.add_child(nav)
+		var cs := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = 6.0
+		cs.shape = circle
+		soldier.add_child(cs)
+		var rect := ColorRect.new()
+		rect.size = Vector2(16.0, 16.0)
+		rect.position = Vector2(-8.0, -8.0)
+		rect.color = Color(0.15, 0.55, 1.0)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		soldier.add_child(rect)
+		squad.add_child(soldier)
+		soldier.add_to_group("player_units")
+	get_tree().current_scene.call_deferred("add_child", squad)
+	call_deferred("_grant_veteran_xp", squad)
+
+func _spawn_at_squad() -> void:
+	var squad = _SQUAD_SCRIPT.new()
+	squad.position = _get_free_spawn_pos()
+	for i in range(3):
+		var soldier := Soldier.new()
+		soldier.name = "AT_Soldier_" + str(i)
+		soldier.position = Vector2(i * 24 - 24, 0)
+		var nav := NavigationAgent2D.new()
+		nav.name = "NavigationAgent2D"
+		soldier.add_child(nav)
+		var cs := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = 6.0
+		cs.shape = circle
+		soldier.add_child(cs)
+		var rect := ColorRect.new()
+		rect.size = Vector2(16.0, 16.0)
+		rect.position = Vector2(-8.0, -8.0)
+		rect.color = Color(0.8, 0.4, 0.2, 1.0)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		soldier.add_child(rect)
+		squad.add_child(soldier)
+		soldier.add_to_group("player_units")
+		var weapon: WeaponComponent = soldier.get_node_or_null("WeaponComponent")
+		if weapon == null:
+			weapon = WeaponComponent.new()
+			weapon.name = "WeaponComponent"
+			soldier.add_child(weapon)
+		weapon.attack_range = 550.0
+		weapon.attack_damage = 45
+		weapon.is_anti_tank = true
+	get_tree().current_scene.call_deferred("add_child", squad)
+
+func _spawn_vehicle() -> void:
+	var vehicle := VehicleUnit.new()
+	vehicle.position = _get_free_spawn_pos()
+	vehicle.is_enemy = false
+	get_tree().current_scene.call_deferred("add_child", vehicle)
+
+func _spawn_drone() -> void:
+	var drone := DroneUnit.new()
+	drone.position = _get_free_spawn_pos()
+	drone.drone_type = DroneUnit.DroneType.FPV_KAMIKAZE
+	drone.is_enemy = false
+	get_tree().current_scene.call_deferred("add_child", drone)
+
+func _spawn_ew_vehicle() -> void:
+	var vehicle := VehicleUnit.new()
+	vehicle.position = _get_free_spawn_pos()
+	vehicle.is_enemy = false
+	vehicle.is_ew_jammer = true
+	get_tree().current_scene.call_deferred("add_child", vehicle)
+
+
+func _grant_veteran_xp(squad: Node) -> void:
+	if not is_instance_valid(squad):
+		return
+	var soldiers: Array = squad.get("soldiers")
+	if soldiers == null:
+		return
+	for s in soldiers:
+		if is_instance_valid(s):
+			var vc: VeterancyComponent = s.get_node_or_null("VeterancyComponent") as VeterancyComponent
+			if vc != null:
+				vc.add_xp(100)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\units\DroneUnit.gd ===
+
+class_name DroneUnit
+extends CharacterBody2D
+
+enum DroneType { RECON = 0, FPV_KAMIKAZE = 1 }
+
+@export var drone_type: int = DroneType.RECON
+@export var is_enemy: bool = false
+@export var max_hp: int = 30
+@export var move_speed: float = 260.0
+@export var explosion_radius: float = 90.0
+@export var explosion_damage: int = 150
+@export var vehicle_damage: int = 350
+
+var current_hp: int
+var target_position: Vector2 = Vector2.ZERO
+var attack_move: bool = false
+var hold_mode: bool = false
+var disabled: bool = false
+var _exploded: bool = false
+
+func _ready() -> void:
+	if is_enemy:
+		add_to_group("enemy_drones")
+		add_to_group("enemy_units")
+	else:
+		add_to_group("player_drones")
+		add_to_group("player_units")
+
+	collision_mask = 0
+
+	if get_node_or_null("CollisionShape2D") == null:
+		var cs := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = 8.0
+		cs.shape = circle
+		add_child(cs)
+
+	if get_node_or_null("ColorRect") == null:
+		var rect := ColorRect.new()
+		rect.size = Vector2(12.0, 12.0)
+		rect.position = Vector2(-6.0, -6.0)
+		rect.color = Color(0.9, 0.2, 0.2, 1.0) if is_enemy else Color(0.95, 0.9, 0.2, 1.0)
+		add_child(rect)
+
+	current_hp = max_hp
+	set_physics_process(false)
+
+func set_destination(destination: Vector2) -> void:
+	target_position = destination
+	hold_mode = false
+	attack_move = false
+	set_physics_process(true)
+
+func hold() -> void:
+	hold_mode = true
+	attack_move = false
+	target_position = global_position
+	velocity = Vector2.ZERO
+
+func stop() -> void:
+	hold_mode = false
+	attack_move = false
+	target_position = global_position
+	velocity = Vector2.ZERO
+
+func set_attack_move(enabled: bool) -> void:
+	attack_move = enabled
+
+func _physics_process(_delta: float) -> void:
+	if disabled:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+	if target_position == Vector2.ZERO:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+
+	var to_target: Vector2 = target_position - global_position
+	if drone_type == DroneType.FPV_KAMIKAZE:
+		if _check_detonation():
+			_explode()
+			return
+
+	if to_target.length() < 8.0:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		set_physics_process(false)
+		return
+
+	velocity = to_target.normalized() * move_speed
+	move_and_slide()
+
+func _check_detonation() -> bool:
+	for group in _target_groups():
+		for node in get_tree().get_nodes_in_group(group):
+			if is_instance_valid(node) and node != self:
+				if global_position.distance_to(node.global_position) <= 20.0:
+					return true
+	return false
+
+func _target_groups() -> Array[String]:
+	if is_enemy:
+		return ["player_units", "player_vehicles"]
+	return ["enemy_units", "enemy_vehicles"]
+
+func take_damage(amount: int) -> void:
+	current_hp -= amount
+	if current_hp <= 0:
+		current_hp = 0
+		if drone_type == DroneType.FPV_KAMIKAZE and not _exploded:
+			_explode()
+		else:
+			queue_free()
+
+func _explode() -> void:
+	if _exploded:
+		return
+	_exploded = true
+	for group in _target_groups():
+		for node in get_tree().get_nodes_in_group(group):
+			if not is_instance_valid(node) or node == self:
+				continue
+			if global_position.distance_to(node.global_position) > explosion_radius:
+				continue
+			var dmg: int = vehicle_damage if node.is_in_group("player_vehicles") or node.is_in_group("enemy_vehicles") else explosion_damage
+			if node.has_method("take_damage"):
+				node.take_damage(dmg)
+			else:
+				var health: HealthComponent = node.get_node_or_null("HealthComponent") as HealthComponent
+				if health != null:
+					health.take_damage(dmg)
+	queue_free()
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\units\VehicleUnit.gd ===
+
+class_name VehicleUnit
+extends CharacterBody2D
+
+@export var is_ew_jammer: bool = false
+@export var is_enemy: bool = false
+@export var max_hp: int = 300
+@export var armor: float = 0.35
+@export var move_speed: float = 120.0
+@export var attack_range: float = 450.0
+@export var attack_damage: int = 40
+@export var attack_cooldown: float = 1.2
+
+var target_position: Vector2 = Vector2.ZERO
+var attack_move: bool = false
+var hold_mode: bool = false
+
+var health_component: HealthComponent
+var weapon: WeaponComponent
+var nav_agent: NavigationAgent2D
+
+func _ready() -> void:
+	z_index = 5
+	if is_enemy:
+		add_to_group("enemy_vehicles")
+		add_to_group("enemy_units")
+	else:
+		add_to_group("player_vehicles")
+		add_to_group("player_units")
+
+	if get_node_or_null("CollisionShape2D") == null:
+		var cs := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = 14.0
+		cs.shape = circle
+		add_child(cs)
+
+	if get_node_or_null("ColorRect") == null:
+		var rect := ColorRect.new()
+		rect.size = Vector2(28.0, 28.0)
+		rect.position = Vector2(-14.0, -14.0)
+		rect.color = Color(0.9, 0.2, 0.2, 1.0) if is_enemy else Color(0.2, 0.9, 0.3, 1.0)
+		add_child(rect)
+
+	health_component = HealthComponent.new()
+	health_component.name = "HealthComponent"
+	health_component.max_hp = max_hp
+	health_component.current_hp = max_hp
+	add_child(health_component)
+	health_component.died.connect(_on_died)
+
+	weapon = WeaponComponent.new()
+	weapon.name = "WeaponComponent"
+	weapon.attack_range = attack_range
+	weapon.attack_damage = attack_damage
+	weapon.attack_cooldown = attack_cooldown
+	weapon.target_group = "enemy_units" if not is_enemy else "player_units"
+	add_child(weapon)
+
+	nav_agent = NavigationAgent2D.new()
+	nav_agent.name = "NavigationAgent2D"
+	add_child(nav_agent)
+
+	set_physics_process(false)
+
+func set_destination(destination: Vector2) -> void:
+	target_position = destination
+	nav_agent.set_target_position(destination)
+	hold_mode = false
+	attack_move = false
+	set_physics_process(true)
+
+func hold() -> void:
+	hold_mode = true
+	attack_move = false
+	target_position = global_position
+	if nav_agent != null:
+		nav_agent.set_target_position(global_position)
+	velocity = Vector2.ZERO
+
+func stop() -> void:
+	hold_mode = false
+	attack_move = false
+	target_position = global_position
+	if nav_agent != null:
+		nav_agent.set_target_position(global_position)
+	velocity = Vector2.ZERO
+
+func set_attack_move(enabled: bool) -> void:
+	attack_move = enabled
+
+func _process(_delta: float) -> void:
+	if is_ew_jammer:
+		var target_group: String = "enemy_drones" if not is_enemy else "player_drones"
+		for d in get_tree().get_nodes_in_group(target_group):
+			if is_instance_valid(d) and d is Node2D:
+				if global_position.distance_to((d as Node2D).global_position) <= 220.0:
+					d.set("disabled", true)
+
+func _physics_process(_delta: float) -> void:
+	if nav_agent.is_navigation_finished():
+		velocity = Vector2.ZERO
+		move_and_slide()
+		set_physics_process(false)
+		return
+	if attack_move and weapon != null and is_instance_valid(weapon) and weapon.current_target != null and is_instance_valid(weapon.current_target):
+		if global_position.distance_to(weapon.current_target.global_position) <= weapon.attack_range:
+			velocity = Vector2.ZERO
+			move_and_slide()
+			return
+	var next_pos: Vector2 = nav_agent.get_next_path_position()
+	if next_pos == Vector2.ZERO:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+	var dir: Vector2 = (next_pos - global_position).normalized()
+	velocity = dir * move_speed
+	move_and_slide()
+
+func take_damage(amount: int, is_at: bool = false) -> void:
+	var dmg_after_armor: float = float(amount) * (1.0 - armor)
+	if not is_at:
+		dmg_after_armor *= 0.15
+	var reduced: int = int(dmg_after_armor)
+	if amount > 0 and reduced < 1:
+		reduced = 1
+	if health_component != null:
+		health_component.take_damage(reduced)
+
+
+func _on_died(_soldier: Node2D) -> void:
+	if is_enemy and randf() < 0.60:
+		call_deferred("_spawn_loot", global_position)
+	queue_free()
+
+func _spawn_loot(pos: Vector2) -> void:
+	var crate := LootCrate.new()
+	crate.loot_type = randi() % 3
+	get_tree().current_scene.add_child(crate)
+	crate.global_position = pos

@@ -571,6 +571,14 @@ func _aoe_damage(center: Vector2, radius: float, damage: int) -> void:
 	var tween := create_tween()
 	tween.tween_property(flash, "color:a", 0.0, 0.3)
 	tween.tween_callback(flash.queue_free)
+	var crater := ColorRect.new()
+	crater.size = Vector2(radius * 0.9, radius * 0.9)
+	crater.position = center - Vector2(radius * 0.45, radius * 0.45)
+	crater.color = Color(0.08, 0.07, 0.06, 0.55)
+	crater.z_index = 1
+	crater.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crater.add_to_group("mission_cleanup")
+	get_tree().current_scene.add_child(crater)
 	var targets: Array = []
 	targets.append_array(get_tree().get_nodes_in_group("enemy_units"))
 	targets.append_array(get_tree().get_nodes_in_group("enemy_vehicles"))
@@ -582,8 +590,11 @@ func _aoe_damage(center: Vector2, radius: float, damage: int) -> void:
 	for obj in hit_targets:
 		if is_instance_valid(obj) and obj is Node2D:
 			if center.distance_to(obj.global_position) <= radius:
-				var health: HealthComponent = obj.get_node_or_null("HealthComponent") as HealthComponent
-				if health != null:
-					health.take_damage(damage)
-				elif obj.has_method("take_damage"):
-					obj.take_damage(damage)
+				if obj is VehicleUnit:
+					(obj as VehicleUnit).take_damage(damage, true)
+				else:
+					var health: HealthComponent = obj.get_node_or_null("HealthComponent") as HealthComponent
+					if health != null:
+						health.take_damage(damage)
+					elif obj.has_method("take_damage"):
+						obj.take_damage(damage)
