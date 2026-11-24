@@ -185,8 +185,11 @@ func _try_spawn() -> void:
 		_spawn_enemy_vehicle()
 		_resources -= 250
 	elif _resources >= 100:
-		_spawn_enemy_squad()
+		var squad: SquadController = _spawn_enemy_squad()
 		_resources -= 100
+		if randf() < 0.35 and is_instance_valid(squad):
+			var flank_y: float = 220.0 if randf() < 0.5 else 1220.0
+			squad.move_squad(Vector2(1300.0, flank_y))
 	elif _resources >= 250:
 		_spawn_enemy_vehicle()
 		_resources -= 250
@@ -202,11 +205,11 @@ func _try_spawn() -> void:
 				if last.has_method("move_squad"):
 					last.move_squad(target.global_position)
 
-func _spawn_enemy_squad() -> void:
+func _spawn_enemy_squad() -> SquadController:
 	var squad: Node2D = _SQUAD_SCRIPT.new()
 	squad.name = "EnemySquad_" + str(_spawned_squads)
 	_spawned_squads += 1
-	squad.position = Vector2(900 + randi_range(0, 300), 300 + randi_range(0, 300))
+	squad.position = Vector2(1950.0 + randi_range(0, 400), 300.0 + randi_range(0, 850))
 	squad.add_to_group("enemy_squads")
 	for i in range(3):
 		var s := Soldier.new()
@@ -229,24 +232,25 @@ func _spawn_enemy_squad() -> void:
 		s.add_to_group("enemy_units")
 		squad.add_child(s)
 	get_parent().add_child(squad)
+	return squad
 
 func _spawn_enemy_vehicle() -> void:
 	var v := VehicleUnit.new()
 	v.name = "EnemyVehicle_" + str(_spawned_squads)
-	v.position = Vector2(1000, 500)
+	v.position = Vector2(1950.0 + randi_range(0, 400), 300.0 + randi_range(0, 850))
 	v.is_enemy = true
 	get_parent().add_child(v)
 
 func _spawn_enemy_drone() -> void:
 	var d := DroneUnit.new()
 	d.name = "EnemyDrone_" + str(_spawned_squads)
-	d.position = Vector2(1000, 500)
+	d.position = Vector2(1950.0 + randi_range(0, 400), 300.0 + randi_range(0, 850))
 	d.drone_type = DroneUnit.DroneType.FPV_KAMIKAZE
 	d.is_enemy = true
 	get_parent().add_child(d)
 
 func _nearest_enemy_target() -> Node2D:
-	var origin: Vector2 = Vector2(960.0, 540.0)
+	var origin: Vector2 = Vector2(2150.0, 720.0)
 	var best: Node2D = null
 	var best_d: float = INF
 	for cp in get_tree().get_nodes_in_group("control_points"):
@@ -871,6 +875,7 @@ enum Type { NONE = 0, MEDIC = 1, SAPPER = 2, RADIO = 3 }
 var squad_controller: Node2D = null
 var _radio_applied: bool = false
 var _heal_accum: float = 0.0
+var _repair_accum: float = 0.0
 
 func _ready() -> void:
 	if squad_controller == null:
@@ -921,6 +926,32 @@ func _process(delta: float) -> void:
 		return
 	if specialist_type == Type.MEDIC:
 		_process_medic(delta, soldiers)
+	if specialist_type == Type.SAPPER:
+		_process_sapper_repair(delta, soldiers)
+
+func _process_sapper_repair(delta: float, soldiers: Array) -> void:
+	_repair_accum += delta
+	if _repair_accum < 1.0:
+		return
+	_repair_accum = 0.0
+
+	var vehicles: Array = get_tree().get_nodes_in_group("player_vehicles")
+	vehicles.append_array(get_tree().get_nodes_in_group("player_turrets"))
+
+	for v in vehicles:
+		if not is_instance_valid(v) or not (v is Node2D):
+			continue
+		var health: HealthComponent = v.get_node_or_null("HealthComponent") as HealthComponent
+		if health == null:
+			continue
+		if health.current_hp >= health.max_hp:
+			continue
+		for s in soldiers:
+			if not is_instance_valid(s) or not (s is Node2D):
+				continue
+			if (s as Node2D).global_position.distance_to((v as Node2D).global_position) <= 85.0:
+				health.current_hp = mini(health.max_hp, health.current_hp + 15)
+				break
 
 func _process_medic(delta: float, soldiers: Array) -> void:
 	_heal_accum += 4.0 * delta
@@ -1472,6 +1503,9 @@ func _collect_sources() -> Array:
 				sources.append({"pos": cf_pos, "radius": 140.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
 	for f in _flares:
 		sources.append({"pos": f["pos"], "radius": float(f["radius"]), "thermal": false, "cone": false, "dir": Vector2.ZERO})
+	for sp in get_tree().get_nodes_in_group("spotlights"):
+		if is_instance_valid(sp) and sp is Node2D:
+			sources.append({"pos": (sp as Node2D).global_position, "radius": 280.0, "thermal": false, "cone": false, "dir": Vector2.ZERO})
 	return sources
 
 func _update_fog() -> void:
@@ -2095,22 +2129,11 @@ func _process(delta: float) -> void:
 			if collider is StaticBody2D:
 				var sb: StaticBody2D = collider as StaticBody2D
 				var hc: HealthComponent = sb.get_node_or_null("HealthComponent") as HealthComponent
-				if sb is FieldFortification:
-					var ff: FieldFortification = sb as FieldFortification
-					if ff.fort_type == FieldFortification.FortType.SANDBAGS and hc != null:
-						if shooter != null and is_instance_valid(shooter) and shooter.global_position.distance_to(sb.global_position) <= 60.0:
-							pass
-						else:
-							hc.take_damage(damage)
-							active = false
-							queue_free()
-							return
-				if hc == null:
-					active = false
-					queue_free()
-					return
-				if not (sb is FieldFortification and (sb as FieldFortification).fort_type == FieldFortification.FortType.SANDBAGS):
-					hc.take_damage(damage)
+				if not collider.has_meta("is_tall_wall") and shooter != null and is_instance_valid(shooter) and shooter.global_position.distance_to((collider as Node2D).global_position) <= 65.0:
+					pass
+				else:
+					if hc != null:
+						hc.take_damage(damage)
 					active = false
 					queue_free()
 					return
@@ -2953,6 +2976,13 @@ func _has_line_of_sight(target: Node2D) -> bool:
 		return false
 	if not (target is Node2D):
 		return false
+	# Smoke clouds block line of sight
+	for smoke in get_tree().get_nodes_in_group("smoke_clouds"):
+		if not is_instance_valid(smoke) or not (smoke is Node2D):
+			continue
+		var closest: Vector2 = Geometry2D.get_closest_point_to_segment(smoke.global_position, global_position, (target as Node2D).global_position)
+		if closest.distance_to(smoke.global_position) <= 105.0:
+			return false
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	if space == null:
 		return true
@@ -2964,11 +2994,10 @@ func _has_line_of_sight(target: Node2D) -> bool:
 	var collider: Object = result.get("collider")
 	if collider is StaticBody2D:
 		var sb: StaticBody2D = collider as StaticBody2D
-		var hc: HealthComponent = sb.get_node_or_null("HealthComponent") as HealthComponent
-		if hc != null:
-			return true
-		if sb is FieldFortification:
-			return true
+		if not collider.has_meta("is_tall_wall"):
+			if shooter.global_position.distance_to((collider as Node2D).global_position) <= 65.0:
+				return true
+			return false
 		return false
 	return true
 
@@ -3433,8 +3462,8 @@ func generate_map(seed_val: int = 0) -> void:
 		road_visual.add_child(dash)
 
 	# Р¦РµРЅС‚СЂРёСЂРѕРІР°РЅРёРµ
-	road.position = Vector2(960.0, 540.0)
-	road_visual.position = Vector2(-960.0, -35.0)
+	road.position = Vector2(_CFG.MAP_WIDTH * 0.5, _CFG.MAP_HEIGHT * 0.5)
+	road_visual.position = Vector2(-_CFG.MAP_WIDTH * 0.5, -35.0)
 	add_child(road)
 
 	# body_entered: +30% С‚РµС…РЅРёРєР°, +15% РїРµС…РѕС‚Р°
@@ -3471,11 +3500,15 @@ func generate_map(seed_val: int = 0) -> void:
 			current_swamp_mult = float(body.get_meta("swamp_mult"))
 		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
 	)
+
+	var placed: Array[Vector2] = []
+	_build_checkpoint(rng, Vector2(1480.0, _CFG.MAP_HEIGHT * 0.5))
+	_build_ruined_town(rng, Vector2(1150.0, 340.0), placed)
+
 	if seed_val != 0:
 		rng.seed = seed_val
 	else:
 		rng.randomize()
-	var placed: Array[Vector2] = []
 	# --- Р‘РћР›РћРўРђ (3вЂ“4 Р·РѕРЅС‹) ---
 	var swamp_count: int = rng.randi_range(3, 4)
 	for i in range(swamp_count):
@@ -3632,9 +3665,9 @@ func generate_map(seed_val: int = 0) -> void:
 		add_child(campfire)
 func _pick_free_spot(rng: RandomNumberGenerator, placed: Array[Vector2], min_dist: float) -> Vector2:
 	for attempt in range(40):
-		var x: float = float(rng.randi_range(420, 1500))
-		var y: float = float(rng.randi_range(160, 920))
-		if absf(y - 540.0) < 105.0:
+		var x: float = float(rng.randi_range(450, 2150))
+		var y: float = float(rng.randi_range(180, 1260))
+		if absf(y - _CFG.MAP_HEIGHT * 0.5) < 110.0:
 			continue
 		var candidate := Vector2(x, y)
 		var ok: bool = true
@@ -3644,7 +3677,150 @@ func _pick_free_spot(rng: RandomNumberGenerator, placed: Array[Vector2], min_dis
 				break
 		if ok:
 			return candidate
-	return Vector2(float(rng.randi_range(420, 1500)), 250.0)
+	return Vector2(float(rng.randi_range(450, 2150)), _CFG.MAP_HEIGHT * 0.5)
+
+func _build_checkpoint(rng: RandomNumberGenerator, pos: Vector2) -> void:
+	# Р‘РµС‚РѕРЅРЅС‹Рµ Р±Р»РѕРєРё РїРѕРїРµСЂС‘Рє РґРѕСЂРѕРіРё (РѕСЃС‚Р°РІР»СЏСЋС‚ РїСЂРѕС…РѕРґ РґР»СЏ С‚РµС…РЅРёРєРё)
+	var block1: StaticBody2D = StaticBody2D.new()
+	block1.name = "CheckpointBlock1"
+	block1.position = pos + Vector2(-40.0, 0.0)
+	var cs1: CollisionShape2D = CollisionShape2D.new()
+	var rs1: RectangleShape2D = RectangleShape2D.new()
+	rs1.size = Vector2(50.0, 22.0)
+	cs1.shape = rs1
+	block1.add_child(cs1)
+	var vis1: ColorRect = ColorRect.new()
+	vis1.size = Vector2(50.0, 22.0)
+	vis1.position = Vector2(-25.0, -11.0)
+	vis1.color = Color(0.45, 0.46, 0.48)
+	vis1.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	block1.add_child(vis1)
+	add_child(block1)
+
+	var block2: StaticBody2D = StaticBody2D.new()
+	block2.name = "CheckpointBlock2"
+	block2.position = pos + Vector2(40.0, 0.0)
+	var cs2: CollisionShape2D = CollisionShape2D.new()
+	var rs2: RectangleShape2D = RectangleShape2D.new()
+	rs2.size = Vector2(50.0, 22.0)
+	cs2.shape = rs2
+	block2.add_child(cs2)
+	var vis2: ColorRect = ColorRect.new()
+	vis2.size = Vector2(50.0, 22.0)
+	vis2.position = Vector2(-25.0, -11.0)
+	vis2.color = Color(0.45, 0.46, 0.48)
+	vis2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	block2.add_child(vis2)
+	add_child(block2)
+
+	# Р›РёРЅРёРё РјРµС€РєРѕРІ СЃ РїРµСЃРєРѕРј
+	var sandbags1: FieldFortification = FieldFortification.new()
+	sandbags1.fort_type = FieldFortification.FortType.SANDBAGS
+	sandbags1.position = pos + Vector2(0.0, -40.0)
+	sandbags1.name = "CheckpointSandbags1"
+	add_child(sandbags1)
+
+	var sandbags2: FieldFortification = FieldFortification.new()
+	sandbags2.fort_type = FieldFortification.FortType.SANDBAGS
+	sandbags2.position = pos + Vector2(0.0, 40.0)
+	sandbags2.name = "CheckpointSandbags2"
+	add_child(sandbags2)
+
+	# Р’Р·СЂС‹РІРЅР°СЏ Р±РѕС‡РєР° СЂСЏРґРѕРј СЃ РјРµС€РєР°РјРё
+	var barrel: ExplosiveProp = ExplosiveProp.new()
+	barrel.position = pos + Vector2(30.0, -30.0)
+	barrel.explosion_radius = 150.0
+	barrel.explosion_damage = 80
+	barrel.hp = 40
+	add_child(barrel)
+
+	# Р Р°Р·СЂСѓС€Р°РµРјС‹Р№ РїСЂРѕР¶РµРєС‚РѕСЂ РљРџРџ
+	var spotlight: StaticBody2D = StaticBody2D.new()
+	spotlight.name = "KPPSpotlight"
+	spotlight.position = pos + Vector2(0.0, -60.0)
+	spotlight.add_to_group("spotlights")
+	spotlight.add_to_group("enemy_units")
+	var scs: CollisionShape2D = CollisionShape2D.new()
+	var scrs: RectangleShape2D = RectangleShape2D.new()
+	scrs.size = Vector2(14.0, 14.0)
+	scs.shape = scrs
+	spotlight.add_child(scs)
+	var shp: ColorRect = ColorRect.new()
+	shp.size = Vector2(14.0, 14.0)
+	shp.position = Vector2(-7.0, -7.0)
+	shp.color = Color(1.0, 0.9, 0.2, 1.0)
+	shp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spotlight.add_child(shp)
+	var shc: HealthComponent = HealthComponent.new()
+	shc.name = "HealthComponent"
+	shc.max_hp = 60
+	shc.current_hp = 60
+	spotlight.add_child(shc)
+	shc.died.connect(func(_n: Node2D) -> void: spotlight.queue_free())
+	add_child(spotlight)
+
+	# Р“Р°СЂРЅРёР·РѕРЅ РІСЂР°РіРѕРІ Сѓ РљРџРџ
+	MissionBuilder.spawn_enemy_squad(get_parent(), pos + Vector2(35.0, 0.0), 3)
+
+func _build_ruined_town(rng: RandomNumberGenerator, center: Vector2, placed: Array[Vector2]) -> void:
+	var offsets: Array[Vector2] = [
+		Vector2(-70.0, -70.0), Vector2(70.0, -70.0),
+		Vector2(-70.0, 70.0), Vector2(70.0, 70.0)
+	]
+	for off in offsets:
+		var building: StaticBody2D = StaticBody2D.new()
+		building.name = "RuinedBuilding"
+		building.position = center + off
+		building.set_meta("is_tall_wall", true)
+		var bcs: CollisionShape2D = CollisionShape2D.new()
+		var brs: RectangleShape2D = RectangleShape2D.new()
+		brs.size = Vector2(50.0, 120.0)
+		bcs.shape = brs
+		building.add_child(bcs)
+		var bvis: ColorRect = ColorRect.new()
+		bvis.size = Vector2(50.0, 120.0)
+		bvis.position = Vector2(-25.0, -60.0)
+		bvis.color = Color(0.32, 0.33, 0.36)
+		bvis.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		building.add_child(bvis)
+		add_child(building)
+
+	# РќРёР·РєРёРµ СѓРєСЂС‹С‚РёСЏ РІРѕ РґРІРѕСЂРµ
+	for i in range(4):
+		var cover: Area2D = Area2D.new()
+		cover.name = "CoverZone"
+		cover.position = center + Vector2(float(i % 2) * 60.0 - 30.0, float(int(float(i) / 2.0)) * 40.0 - 20.0)
+		var cz: CollisionShape2D = CollisionShape2D.new()
+		var czs: CircleShape2D = CircleShape2D.new()
+		czs.radius = 30.0
+		cz.shape = czs
+		cover.add_child(cz)
+		cover.set_script(load("res://scripts/components/CoverZone.gd"))
+		add_child(cover)
+
+	# РљРѕСЃС‚С‘СЂ РІ С†РµРЅС‚СЂРµ РґРІРѕСЂР°
+	var campfire: Node2D = Node2D.new()
+	campfire.name = "Campfire"
+	campfire.add_to_group("campfires")
+	campfire.add_to_group("mission_cleanup")
+	var base_rect: ColorRect = ColorRect.new()
+	base_rect.color = Color(0.12, 0.1, 0.08, 0.95)
+	base_rect.size = Vector2(14.0, 14.0)
+	base_rect.position = Vector2(-7.0, -7.0)
+	base_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	campfire.add_child(base_rect)
+	var flame: ColorRect = ColorRect.new()
+	flame.name = "Flame"
+	flame.color = Color(1.0, 0.55, 0.1, 0.95)
+	flame.size = Vector2(8.0, 8.0)
+	flame.position = Vector2(-4.0, -4.0)
+	flame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	campfire.add_child(flame)
+	campfire.position = center
+	campfire.set_script(preload("res://scripts/environment/Campfire.gd"))
+	add_child(campfire)
+
+	placed.append(center)
 
 === D:\Godot\.NET\Projects\east-rift-zone\scripts\ui\GameHUD.gd ===
 
@@ -3767,6 +3943,15 @@ func _ready() -> void:
 	var mm: MissionManager = get_parent().get_node_or_null("MissionManager") as MissionManager
 	if mm != null and _day_night_btn != null:
 		_day_night_btn.visible = (mm.mission == MissionManager.Mission.SANDBOX)
+
+	# Minimap (bottom right)
+	var minimap := HUDMinimap.new()
+	minimap.name = "HUDMinimap"
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	if vp.x <= 0.0:
+		vp = Vector2(1280.0, 720.0)
+	minimap.position = Vector2(vp.x - 250.0, vp.y - 145.0)
+	add_child(minimap)
 
 func _on_sp_changed(_new_amount: int) -> void:
 	_update_sp_label()
@@ -3959,6 +4144,7 @@ var _mine_mode: bool = false
 var _artillery_mode: bool = false
 var _grenade_mode: bool = false
 var _flare_mode: bool = false
+var _smoke_mode: bool = false
 
 
 # Build fort state
@@ -3981,6 +4167,7 @@ var _grenade_btn: Button = null
 var _flashlight_btn: Button = null
 var _nvg_btn: Button = null
 var _cancel_mode_btn: Button = null
+var _smoke_btn: Button = null
 
 # Formation names (English)
 var formation_names: Array = ["Line", "Column", "Wedge", "Spread"]
@@ -4037,6 +4224,10 @@ func _ready() -> void:
 	_cancel_mode_btn = _make_btn("Cancel", "Cancel current build mode", _on_cancel_mode_pressed)
 	_cancel_mode_btn.visible = false
 	abil_hbox.add_child(_cancel_mode_btn)
+
+	_smoke_btn = _make_btn("Smoke (40 SP)", "Deploy smoke screen (requires radio)", _on_smoke_screen)
+	_smoke_btn.visible = false
+	abil_hbox.add_child(_smoke_btn)
 
 	# Second row: tactical commands
 	var tac_hbox := HBoxContainer.new()
@@ -4153,6 +4344,23 @@ func _on_grenade() -> void:
 		_mine_mode = false
 		_artillery_mode = false
 		_flare_mode = false
+
+func _on_smoke_screen() -> void:
+	var target_squad: Node2D = _get_selected_squad()
+	if target_squad == null:
+		_show_notification("First select a squad!")
+		return
+	var spec: SpecialistComponent = target_squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
+	if spec == null or spec.specialist_type != SpecialistComponent.Type.RADIO:
+		_show_notification("Squad must have a radio operator!")
+		return
+	if _eco != null and _eco.spend_sp(40):
+		_smoke_mode = true
+		_mine_mode = false
+		_grenade_mode = false
+		_artillery_mode = false
+		_flare_mode = false
+		_build_fort_type = -1
 
 func enable_flare_mode() -> void:
 	if _eco != null and _eco.spend_sp(30):
@@ -4282,6 +4490,7 @@ func _on_cancel_mode_pressed() -> void:
 	_grenade_mode = false
 	_artillery_mode = false
 	_flare_mode = false
+	_smoke_mode = false
 	_build_fort_type = -1
 	_build_anchor_set = false
 
@@ -4303,7 +4512,7 @@ func _process(_delta: float) -> void:
 	visible = true
 
 	if _cancel_mode_btn != null:
-		_cancel_mode_btn.visible = (_mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0)
+		_cancel_mode_btn.visible = (_mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _smoke_mode or _build_fort_type >= 0)
 
 	var spec: SpecialistComponent = squad.get_node_or_null("SpecialistComponent") as SpecialistComponent
 	if _mine_btn != null:
@@ -4316,6 +4525,8 @@ func _process(_delta: float) -> void:
 			_turret_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.SAPPER)
 	if _arty_btn != null:
 		_arty_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.RADIO)
+	if _smoke_btn != null:
+		_smoke_btn.visible = (spec != null and spec.specialist_type == SpecialistComponent.Type.RADIO)
 
 	var soldiers: Array = squad.get("soldiers")
 	if _flashlight_btn != null and squad != null:
@@ -4350,11 +4561,12 @@ func _input(event: InputEvent) -> void:
 			_build_anchor_set = false
 			get_viewport().set_input_as_handled()
 			return
-		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0:
+		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _smoke_mode or _build_fort_type >= 0:
 			_mine_mode = false
 			_grenade_mode = false
 			_artillery_mode = false
 			_flare_mode = false
+			_smoke_mode = false
 			_build_fort_type = -1
 			_build_anchor_set = false
 			get_viewport().set_input_as_handled()
@@ -4365,11 +4577,12 @@ func _input(event: InputEvent) -> void:
 			_build_anchor_set = false
 			get_viewport().set_input_as_handled()
 			return
-		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _build_fort_type >= 0:
+		if _mine_mode or _grenade_mode or _artillery_mode or _flare_mode or _smoke_mode or _build_fort_type >= 0:
 			_mine_mode = false
 			_grenade_mode = false
 			_artillery_mode = false
 			_flare_mode = false
+			_smoke_mode = false
 			_build_fort_type = -1
 			_build_anchor_set = false
 			get_viewport().set_input_as_handled()
@@ -4454,6 +4667,28 @@ func _input(event: InputEvent) -> void:
 					_aoe_damage(world_pos, 50.0, 60)
 				else:
 					_show_notification("Not enough SP")
+			return
+		if _smoke_mode:
+			_smoke_mode = false
+			get_viewport().set_input_as_handled()
+			if _eco != null and _eco.spend_sp(40):
+				var smoke: Node2D = Node2D.new()
+				smoke.name = "SmokeCloud"
+				smoke.global_position = world_pos
+				smoke.add_to_group("smoke_clouds")
+				smoke.add_to_group("mission_cleanup")
+				var smoke_rect: ColorRect = ColorRect.new()
+				smoke_rect.size = Vector2(220.0, 220.0)
+				smoke_rect.position = Vector2(-110.0, -110.0)
+				smoke_rect.color = Color(0.5, 0.5, 0.5, 0.45)
+				smoke_rect.z_index = 45
+				smoke_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				smoke.add_child(smoke_rect)
+				get_tree().current_scene.add_child(smoke)
+				var timer := get_tree().create_timer(12.0)
+				timer.timeout.connect(smoke.queue_free)
+			else:
+				_show_notification("Not enough SP")
 			return
 		if _build_fort_type >= 0:
 			get_viewport().set_input_as_handled()
@@ -4542,6 +4777,117 @@ func _aoe_damage(center: Vector2, radius: float, damage: int) -> void:
 						health.take_damage(damage)
 					elif obj.has_method("take_damage"):
 						obj.take_damage(damage)
+
+=== D:\Godot\.NET\Projects\east-rift-zone\scripts\ui\HUDMinimap.gd ===
+
+class_name HUDMinimap extends Control
+
+const _CFG := preload("res://scripts/core/GameConfig.gd")
+
+const MAP_UI_W: float = 240.0
+const MAP_UI_H: float = 135.0
+
+func _ready() -> void:
+	custom_minimum_size = Vector2(MAP_UI_W, MAP_UI_H)
+	size = Vector2(MAP_UI_W, MAP_UI_H)
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	set_process(true)
+
+func _process(_delta: float) -> void:
+	queue_redraw()
+
+func _draw() -> void:
+	var rect: Rect2 = Rect2(Vector2.ZERO, size)
+	draw_rect(rect, Color(0.08, 0.1, 0.08, 0.88), true)
+	draw_rect(rect, Color(0.45, 0.5, 0.45, 0.9), false, 1.5)
+
+	# Р”РѕСЂРѕРіР° РїРѕ С†РµРЅС‚СЂСѓ
+	var road_y: float = size.y * 0.5
+	draw_line(Vector2(0.0, road_y), Vector2(size.x, road_y), Color(0.6, 0.6, 0.6, 0.6), 1.0)
+
+	var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
+
+	# РўРѕС‡РєРё РєРѕРЅС‚СЂРѕР»СЏ
+	for cp in get_tree().get_nodes_in_group("control_points"):
+		if not is_instance_valid(cp) or not (cp is Node2D):
+			continue
+		var owner_val: int = int(cp.get("point_owner"))
+		var color: Color = Color(0.5, 0.5, 0.5, 1.0)
+		match owner_val:
+			1:
+				color = Color(0.2, 0.7, 1.0, 1.0)
+			2:
+				color = Color(1.0, 0.25, 0.25, 1.0)
+			_:
+				color = Color(0.5, 0.5, 0.5, 1.0)
+		var mini_pos: Vector2 = _to_mini((cp as Node2D).global_position)
+		draw_rect(Rect2(mini_pos - Vector2(3.0, 3.0), Vector2(6.0, 6.0)), color)
+
+	# РЎРѕСЋР·РЅС‹Рµ СЋРЅРёС‚С‹
+	for g in ["player_units", "player_vehicles", "player_drones"]:
+		for node in get_tree().get_nodes_in_group(g):
+			if not is_instance_valid(node) or not (node is Node2D):
+				continue
+			var mini_pos: Vector2 = _to_mini((node as Node2D).global_position)
+			draw_circle(mini_pos, 2.5, Color(0.2, 0.7, 1.0, 1.0))
+
+	# Р’РёРґРёРјС‹Рµ РІСЂР°РіРё
+	for g in ["enemy_units", "enemy_vehicles", "mutants"]:
+		for node in get_tree().get_nodes_in_group(g):
+			if not is_instance_valid(node) or not (node is Node2D):
+				continue
+			if not (node as Node).visible:
+				continue
+			var mini_pos: Vector2 = _to_mini((node as Node2D).global_position)
+			draw_circle(mini_pos, 2.5, Color(1.0, 0.25, 0.25, 1.0))
+
+	# РџСЂСЏРјРѕСѓРіРѕР»СЊРЅРёРє РєР°РјРµСЂС‹
+	if cam != null:
+		var cam_size: Vector2 = cam.get_viewport_rect().size if cam.get_viewport() != null else Vector2(640.0, 360.0)
+		var cam_mini: Vector2 = _to_mini(cam.global_position - cam_size * 0.5)
+		var cam_mini_size: Vector2 = Vector2((cam_size.x / _CFG.MAP_WIDTH) * size.x, (cam_size.y / _CFG.MAP_HEIGHT) * size.y)
+		draw_rect(Rect2(cam_mini, cam_mini_size), Color(1.0, 1.0, 1.0, 0.6), false, 1.0)
+
+func _to_mini(world_pos: Vector2) -> Vector2:
+	return Vector2((world_pos.x / _CFG.MAP_WIDTH) * size.x, (world_pos.y / _CFG.MAP_HEIGHT) * size.y)
+
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var world_pos: Vector2 = _world_from_mini(event.position)
+		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			var cam: Camera2D = get_tree().get_first_node_in_group("rts_camera") as Camera2D
+			if cam != null:
+				cam.position = world_pos
+			accept_event()
+		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			_send_selected_to(world_pos)
+			accept_event()
+
+func _world_from_mini(mini_pos: Vector2) -> Vector2:
+	return Vector2((mini_pos.x / size.x) * _CFG.MAP_WIDTH, (mini_pos.y / size.y) * _CFG.MAP_HEIGHT)
+
+func _send_selected_to(world_pos: Vector2) -> void:
+	var sel_mgr: Node = get_tree().current_scene.get_node_or_null("SelectionManager")
+	if sel_mgr == null:
+		return
+	var selected_squads: Array = sel_mgr.get("selected_squads")
+	if selected_squads == null:
+		return
+	for sq in selected_squads:
+		if not is_instance_valid(sq) or not (sq is Node2D):
+			continue
+		if sq.has_method("move_squad"):
+			sq.move_squad(world_pos)
+		elif sq.has_method("set_destination"):
+			sq.set_destination(world_pos)
+	var selected_units: Array = sel_mgr.get("selected_units")
+	if selected_units == null:
+		return
+	for unit in selected_units:
+		if not is_instance_valid(unit) or not (unit is Node2D):
+			continue
+		if unit.has_method("set_destination"):
+			unit.set_destination(world_pos)
 
 === D:\Godot\.NET\Projects\east-rift-zone\scripts\ui\HUDReinforcementPanel.gd ===
 

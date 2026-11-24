@@ -118,6 +118,15 @@ func _ready() -> void:
 	if mm != null and _day_night_btn != null:
 		_day_night_btn.visible = (mm.mission == MissionManager.Mission.SANDBOX)
 
+	# Minimap (bottom right)
+	var minimap := HUDMinimap.new()
+	minimap.name = "HUDMinimap"
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	if vp.x <= 0.0:
+		vp = Vector2(1280.0, 720.0)
+	minimap.position = Vector2(vp.x - 250.0, vp.y - 145.0)
+	add_child(minimap)
+
 func _on_sp_changed(_new_amount: int) -> void:
 	_update_sp_label()
 
