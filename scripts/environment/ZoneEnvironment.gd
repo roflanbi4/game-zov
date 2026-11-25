@@ -27,78 +27,31 @@ func generate_map(seed_val: int = 0) -> void:
 	var town_y: float = float(rng.randi_range(280, 420)) if road_y > 720.0 else float(rng.randi_range(1020, 1160))
 	town_pos = Vector2(float(rng.randi_range(750, 1750)), town_y)
 	# --- РђРЎР¤РђР›Р¬РўРћР’РђРЇ Р”РћР РћР“Рђ ---
-	var road: Area2D = Area2D.new()
-	road.name = "Road"
-	var road_coll: CollisionShape2D = CollisionShape2D.new()
-	road_coll.shape = RectangleShape2D.new()
-	(road_coll.shape as RectangleShape2D).size = Vector2(_CFG.MAP_WIDTH, 70.0)
-	road.add_child(road_coll)
-
-	var road_visual: ColorRect = ColorRect.new()
-	road_visual.color = Color(0.22, 0.23, 0.25, 0.85)
-	road_visual.size = Vector2(_CFG.MAP_WIDTH, 70.0)
-	road_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	road.add_child(road_visual)
-
-	# РџСЂРµСЂС‹РІРёСЃС‚Р°СЏ Р¶С‘Р»С‚Р°СЏ СЂР°Р·РјРµС‚РєР° РїРѕ С†РµРЅС‚СЂСѓ
-	for i in range(0, int(_CFG.MAP_WIDTH), 60):
-		var dash: ColorRect = ColorRect.new()
-		dash.color = Color(0.95, 0.85, 0.05, 0.9)
-		dash.size = Vector2(30.0, 6.0)
-		dash.position = Vector2(float(i), 32.0)
-		dash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		road_visual.add_child(dash)
-
-	# Р¦РµРЅС‚СЂРёСЂРѕРІР°РЅРёРµ
-	road.position = Vector2(_CFG.MAP_WIDTH * 0.5, road_y)
-	road_visual.position = Vector2(-_CFG.MAP_WIDTH * 0.5, -35.0)
-	add_child(road)
+	_create_road_segment(Rect2(0.0, road_y - 35.0, _CFG.MAP_WIDTH, 70.0))
 	if add_branch:
-		var branch_visual: ColorRect = ColorRect.new()
-		branch_visual.size = Vector2(70.0, float(_CFG.MAP_HEIGHT))
-		branch_visual.position = Vector2(crossroad_x - 35.0, 0.0)
-		branch_visual.color = Color(0.22, 0.23, 0.25, 0.85)
-		branch_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(branch_visual)
-
-	# body_entered: +30% С‚РµС…РЅРёРєР°, +15% РїРµС…РѕС‚Р°
-	road.body_entered.connect(func(body: Node) -> void:
-		if body.get("move_speed") == null:
-			return
-		if not body.has_meta("terrain_base_move_speed"):
-			body.set_meta("terrain_base_move_speed", body.get("move_speed"))
-		if not body.has_meta("road_mult"):
-			body.set_meta("road_mult", 1.0)
-		if not body.has_meta("swamp_mult"):
-			body.set_meta("swamp_mult", 1.0)
-		var road_mult: float = 1.0
-		if body.is_in_group("player_vehicles") or body.is_in_group("enemy_vehicles"):
-			road_mult = 1.3
-		elif body.is_in_group("player_units") or body.is_in_group("enemy_units"):
-			road_mult = 1.15
-		body.set_meta("road_mult", road_mult)
-		var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
-		var current_road_mult: float = float(body.get_meta("road_mult"))
-		var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
-		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
-	)
-
-	# body_exited: РїРµСЂРµСЃС‡РёС‚Р°С‚СЊ СЃРєРѕСЂРѕСЃС‚СЊ Р±РµР· РґРѕСЂРѕРіРё
-	road.body_exited.connect(func(body: Node) -> void:
-		if not body.has_meta("terrain_base_move_speed"):
-			return
-		body.set_meta("road_mult", 1.0)
-		var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
-		var current_road_mult: float = float(body.get_meta("road_mult"))
-		var current_swamp_mult: float = 1.0
-		if body.has_meta("swamp_mult"):
-			current_swamp_mult = float(body.get_meta("swamp_mult"))
-		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
-	)
+		_create_road_segment(Rect2(crossroad_x - 35.0, 0.0, 70.0, _CFG.MAP_HEIGHT))
 
 	var placed: Array[Vector2] = []
 	_build_checkpoint(rng, checkpoint_pos)
+	placed.append(checkpoint_pos)
 	_build_ruined_town(rng, town_pos, placed)
+
+	# --- Точки интереса (POI) ---
+	var industrial_pos: Vector2 = _pick_free_spot(rng, placed, 320.0)
+	placed.append(industrial_pos)
+	_build_industrial_zone(rng, industrial_pos)
+
+	var anomaly_pos: Vector2 = _pick_free_spot(rng, placed, 320.0)
+	placed.append(anomaly_pos)
+	_build_anomaly_field(rng, anomaly_pos)
+
+	var convoy_pos: Vector2 = _pick_free_spot(rng, placed, 320.0)
+	placed.append(convoy_pos)
+	_build_wrecked_convoy(rng, convoy_pos)
+
+	var camp_pos: Vector2 = _pick_free_spot(rng, placed, 320.0)
+	placed.append(camp_pos)
+	_build_stalker_camp(rng, camp_pos)
 
 	if seed_val != 0:
 		rng.seed = seed_val
@@ -272,6 +225,78 @@ func generate_map(seed_val: int = 0) -> void:
 		np.vertices = verts
 		np.polygons = [PackedInt32Array([0, 1, 2, 3])]
 		nav_region.navigation_polygon = np
+func _create_road_segment(rect: Rect2) -> Area2D:
+	var road: Area2D = Area2D.new()
+	road.name = "RoadSegment"
+	var road_coll: CollisionShape2D = CollisionShape2D.new()
+	road_coll.shape = RectangleShape2D.new()
+	(road_coll.shape as RectangleShape2D).size = rect.size
+	road.add_child(road_coll)
+
+	var road_visual: ColorRect = ColorRect.new()
+	road_visual.color = Color(0.22, 0.23, 0.25, 0.85)
+	road_visual.size = rect.size
+	road_visual.position = -rect.size / 2.0
+	road_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	road.add_child(road_visual)
+
+	# Жёлтая прерывистая разметка вдоль длинной оси
+	var dash_axis_len: float = maxf(rect.size.x, rect.size.y)
+	var is_horizontal: bool = rect.size.x >= rect.size.y
+	for i in range(0, int(dash_axis_len), 60):
+		var dash: ColorRect = ColorRect.new()
+		dash.color = Color(0.95, 0.85, 0.05, 0.9)
+		dash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if is_horizontal:
+			dash.size = Vector2(30.0, 6.0)
+			dash.position = Vector2(float(i), rect.size.y * 0.5 - 3.0)
+		else:
+			dash.size = Vector2(6.0, 30.0)
+			dash.position = Vector2(rect.size.x * 0.5 - 3.0, float(i))
+		road_visual.add_child(dash)
+
+	# Центрирование
+	road.position = rect.position + rect.size * 0.5
+	add_child(road)
+
+	# body_entered: +30% технике, +15% пехоте
+	road.body_entered.connect(func(body: Node) -> void:
+		if body.get("move_speed") == null:
+			return
+		if not body.has_meta("terrain_base_move_speed"):
+			body.set_meta("terrain_base_move_speed", body.get("move_speed"))
+		if not body.has_meta("road_mult"):
+			body.set_meta("road_mult", 1.0)
+		if not body.has_meta("swamp_mult"):
+			body.set_meta("swamp_mult", 1.0)
+		var road_mult: float = 1.0
+		if body.is_in_group("player_vehicles") or body.is_in_group("enemy_vehicles"):
+			road_mult = 1.3
+		elif body.is_in_group("player_units") or body.is_in_group("enemy_units"):
+			road_mult = 1.15
+		body.set_meta("road_mult", road_mult)
+		var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
+		var current_road_mult: float = float(body.get_meta("road_mult"))
+		var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
+		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
+	)
+
+	# body_exited: пересчитать скорость без дороги
+	road.body_exited.connect(func(body: Node) -> void:
+		if not body.has_meta("terrain_base_move_speed"):
+			return
+		body.set_meta("road_mult", 1.0)
+		var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
+		var current_road_mult: float = float(body.get_meta("road_mult"))
+		var current_swamp_mult: float = 1.0
+		if body.has_meta("swamp_mult"):
+			current_swamp_mult = float(body.get_meta("swamp_mult"))
+		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
+	)
+
+	return road
+
+
 func _pick_free_spot(rng: RandomNumberGenerator, placed: Array[Vector2], min_dist: float) -> Vector2:
 	for attempt in range(40):
 		var x: float = float(rng.randi_range(450, 2150))
@@ -427,7 +452,7 @@ func _build_ruined_town(rng: RandomNumberGenerator, center: Vector2, placed: Arr
 		var building: StaticBody2D = StaticBody2D.new()
 		building.name = "RuinedBuilding_Khrushchyovka_%d" % i
 		building.position = center + khrushchyovkas[i % khrushchyovkas.size()] + Vector2(rng.randf_range(-25.0, 25.0), rng.randf_range(-25.0, 25.0))
-		building.rotation = rng.randf_range(0.0, 1.0) * (PI * 0.5)
+		building.rotation = float(rng.randi_range(0, 3)) * (PI * 0.5)
 		building.set_meta("is_tall_wall", true)
 		var bcs: CollisionShape2D = CollisionShape2D.new()
 		var brs: RectangleShape2D = RectangleShape2D.new()
@@ -454,7 +479,7 @@ func _build_ruined_town(rng: RandomNumberGenerator, center: Vector2, placed: Arr
 		var garage: StaticBody2D = StaticBody2D.new()
 		garage.name = "Garage_%d" % i
 		garage.position = center + garages[i % garages.size()] + Vector2(rng.randf_range(-25.0, 25.0), rng.randf_range(-25.0, 25.0))
-		garage.rotation = rng.randf_range(0.0, 1.0) * (PI * 0.5)
+		garage.rotation = float(rng.randi_range(0, 3)) * (PI * 0.5)
 		garage.set_meta("is_tall_wall", true)
 		var gcs: CollisionShape2D = CollisionShape2D.new()
 		var grs: RectangleShape2D = RectangleShape2D.new()
@@ -553,3 +578,139 @@ func _build_ruined_town(rng: RandomNumberGenerator, center: Vector2, placed: Arr
 	placed.append(center)
 
 
+
+func _build_industrial_zone(rng: RandomNumberGenerator, center: Vector2) -> void:
+	var hangar_count: int = rng.randi_range(2, 3)
+	var hangar_offsets: Array[Vector2] = [
+		Vector2(-150.0, -60.0),
+		Vector2(150.0, 40.0),
+		Vector2(0.0, 140.0),
+	]
+	for i in range(hangar_count):
+		var hangar: StaticBody2D = StaticBody2D.new()
+		hangar.name = "IndustrialHangar_%d" % i
+		hangar.position = center + hangar_offsets[i % hangar_offsets.size()] + Vector2(rng.randf_range(-15.0, 15.0), rng.randf_range(-15.0, 15.0))
+		hangar.rotation = float(rng.randi_range(0, 3)) * (PI * 0.5)
+		hangar.set_meta("is_tall_wall", true)
+		var hcs: CollisionShape2D = CollisionShape2D.new()
+		var hrs: RectangleShape2D = RectangleShape2D.new()
+		hrs.size = Vector2(140.0, 55.0)
+		hcs.shape = hrs
+		hangar.add_child(hcs)
+		var hvis: ColorRect = ColorRect.new()
+		hvis.size = Vector2(140.0, 55.0)
+		hvis.position = Vector2(-70.0, -27.5)
+		hvis.color = Color(0.34, 0.36, 0.40)
+		hvis.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hangar.add_child(hvis)
+		add_child(hangar)
+
+	var barrel: ExplosiveProp = ExplosiveProp.new()
+	barrel.position = center + Vector2(40.0, -30.0)
+	barrel.explosion_radius = 150.0
+	barrel.explosion_damage = 80
+	barrel.hp = 40
+	add_child(barrel)
+
+	var loot: LootCrate = LootCrate.new()
+	loot.loot_type = LootCrate.LootType.SP_CACHE
+	loot.position = center + Vector2(-40.0, 30.0)
+	add_child(loot)
+
+func _build_anomaly_field(rng: RandomNumberGenerator, center: Vector2) -> void:
+	var anomaly_count: int = rng.randi_range(2, 3)
+	var anomaly_types: Array[int] = [AnomalyZone.AnomalyType.VORTEX, AnomalyZone.AnomalyType.THERMAL, AnomalyZone.AnomalyType.EMP]
+	var offsets: Array[Vector2] = [Vector2(-120.0, -80.0), Vector2(120.0, -40.0), Vector2(0.0, 120.0)]
+	for i in range(anomaly_count):
+		var anomaly: AnomalyZone = AnomalyZone.new()
+		anomaly.name = "AnomalyField_%d" % i
+		anomaly.position = center + offsets[i % offsets.size()] + Vector2(rng.randf_range(-20.0, 20.0), rng.randf_range(-20.0, 20.0))
+		anomaly.anomaly_type = anomaly_types[i % anomaly_types.size()]
+		anomaly.radius = 90.0
+		anomaly.damage = 6
+		add_child(anomaly)
+
+	var artifact: ArtifactPickup = ArtifactPickup.new()
+	artifact.position = center
+	artifact.buff_type = ArtifactPickup.BuffType.SPEED
+	add_child(artifact)
+
+func _build_wrecked_convoy(rng: RandomNumberGenerator, center: Vector2) -> void:
+	var btr_count: int = rng.randi_range(2, 3)
+	var offsets: Array[Vector2] = [Vector2(-140.0, -50.0), Vector2(120.0, 30.0), Vector2(0.0, 130.0)]
+	for i in range(btr_count):
+		var hull: StaticBody2D = StaticBody2D.new()
+		hull.name = "WreckedBTR_%d" % i
+		hull.position = center + offsets[i % offsets.size()] + Vector2(rng.randf_range(-15.0, 15.0), rng.randf_range(-15.0, 15.0))
+		hull.rotation = float(rng.randi_range(0, 3)) * (PI * 0.5)
+		var hcs: CollisionShape2D = CollisionShape2D.new()
+		var hrs: RectangleShape2D = RectangleShape2D.new()
+		hrs.size = Vector2(44.0, 24.0)
+		hcs.shape = hrs
+		hull.add_child(hcs)
+		var hvis: ColorRect = ColorRect.new()
+		hvis.size = Vector2(44.0, 24.0)
+		hvis.position = Vector2(-22.0, -12.0)
+		hvis.color = Color(0.38, 0.26, 0.18)
+		hvis.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hull.add_child(hvis)
+		var cover_zone: Area2D = Area2D.new()
+		cover_zone.name = "CoverZone"
+		var cz_coll: CollisionShape2D = CollisionShape2D.new()
+		var cz_circle: CircleShape2D = CircleShape2D.new()
+		cz_circle.radius = 55.0
+		cz_coll.shape = cz_circle
+		cover_zone.add_child(cz_coll)
+		cover_zone.set_script(load("res://scripts/components/CoverZone.gd"))
+		hull.add_child(cover_zone)
+		add_child(hull)
+
+	var barrel: ExplosiveProp = ExplosiveProp.new()
+	barrel.position = center + Vector2(50.0, -40.0)
+	barrel.explosion_radius = 150.0
+	barrel.explosion_damage = 80
+	barrel.hp = 40
+	add_child(barrel)
+
+	for i in range(2):
+		var loot: LootCrate = LootCrate.new()
+		if i == 0:
+			loot.loot_type = LootCrate.LootType.SP_CACHE
+		else:
+			loot.loot_type = LootCrate.LootType.TROPHY_RPG
+		loot.position = center + Vector2(-50.0 + float(i) * 100.0, 50.0)
+		add_child(loot)
+
+func _build_stalker_camp(rng: RandomNumberGenerator, center: Vector2) -> void:
+	var campfire: Node2D = Node2D.new()
+	campfire.name = "StalkerCampfire"
+	campfire.add_to_group("campfires")
+	campfire.add_to_group("mission_cleanup")
+	var base_rect: ColorRect = ColorRect.new()
+	base_rect.color = Color(0.12, 0.1, 0.08, 0.95)
+	base_rect.size = Vector2(14.0, 14.0)
+	base_rect.position = Vector2(-7.0, -7.0)
+	base_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	campfire.add_child(base_rect)
+	var flame: ColorRect = ColorRect.new()
+	flame.name = "Flame"
+	flame.color = Color(1.0, 0.55, 0.1, 0.95)
+	flame.size = Vector2(8.0, 8.0)
+	flame.position = Vector2(-4.0, -4.0)
+	flame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	campfire.add_child(flame)
+	campfire.position = center
+	campfire.set_script(preload("res://scripts/environment/Campfire.gd"))
+	add_child(campfire)
+
+	for i in range(2):
+		var sandbags: FieldFortification = FieldFortification.new()
+		sandbags.fort_type = FieldFortification.FortType.SANDBAGS
+		sandbags.name = "CampSandbags_%d" % i
+		sandbags.position = center + Vector2(-60.0 + float(i) * 120.0, 40.0)
+		add_child(sandbags)
+
+	var loot: LootCrate = LootCrate.new()
+	loot.loot_type = LootCrate.LootType.MEDKIT
+	loot.position = center + Vector2(0.0, -40.0)
+	add_child(loot)

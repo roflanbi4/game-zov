@@ -12,6 +12,7 @@ var _menu: CanvasLayer
 var _objective_label: Label
 var _finish_overlay: Node
 var _objective_text_override: String = ""
+var _hold_timer: float = 0.0
 
 var _mission_start_time: float = 0.0
 var _finished: bool = false
@@ -92,7 +93,7 @@ func _start_mission(m: int) -> void:
 	_clear_world()
 	await get_tree().process_frame
 	_build_base()
-	var env: Node2D = preload("res://scripts/environment/ZoneEnvironment.gd").new()
+	var env: Node2D = load("res://scripts/environment/ZoneEnvironment.gd").new()
 	env.z_index = 0
 	get_parent().add_child(env)
 	env.generate_map(0)
@@ -144,6 +145,59 @@ func _set_objective(text: String) -> void:
 	_objective_text_override = text
 	if is_instance_valid(_objective_label):
 		_objective_label.text = "OBJECTIVE: " + text
+
+func _process(delta: float) -> void:
+	if mission == Mission.NONE or _finished:
+		return
+
+	if Time.get_ticks_msec() / 1000.0 - _mission_start_time > 5.0:
+		var alive_units: int = 0
+		for n in get_tree().get_nodes_in_group("player_units"):
+			if is_instance_valid(n) and n is Node2D:
+				alive_units += 1
+		for n in get_tree().get_nodes_in_group("player_vehicles"):
+			if is_instance_valid(n) and n is Node2D:
+				alive_units += 1
+		if alive_units == 0:
+			_finish(false)
+
+	if mission == Mission.M1:
+		var spawner_m1: MutantWaveSpawner = get_parent().get_node_or_null("MutantWaveSpawner") as MutantWaveSpawner
+		if spawner_m1 != null and spawner_m1._done and spawner_m1.alive_mutants() == 0:
+			var all_captured: bool = true
+			for cp in get_tree().get_nodes_in_group("control_points"):
+				if cp is ControlPoint and (cp as ControlPoint).point_owner != ControlPoint.Owner.PLAYER:
+					all_captured = false
+					break
+			if all_captured:
+				_finish(true)
+
+	if mission == Mission.M2:
+		var extraction: Node2D = get_parent().get_node_or_null("ExtractionZone")
+		var alive_trucks: Array[VehicleUnit] = []
+		for truck in _convoy_trucks:
+			if is_instance_valid(truck):
+				alive_trucks.append(truck)
+		if alive_trucks.is_empty():
+			_finish(false)
+		else:
+			for truck in alive_trucks:
+				if (truck as Node2D).global_position.distance_to((extraction as Node2D).global_position) < 140.0:
+					_finish(true)
+					break
+
+	if mission == Mission.M4:
+		var cp_owned: bool = false
+		for cp in get_tree().get_nodes_in_group("control_points"):
+			if cp is ControlPoint and (cp as ControlPoint).point_owner == ControlPoint.Owner.PLAYER:
+				cp_owned = true
+				break
+		if cp_owned:
+			_hold_timer += delta
+			if is_instance_valid(_objective_label):
+				_objective_label.text = "OBJECTIVE: Hold the Rift (" + str(maxi(0, int(180.0 - _hold_timer))) + "s left)"
+			if _hold_timer >= 180.0:
+				_finish(true)
 
 func _on_base_destroyed(_node: Node2D) -> void:
 	if mission == Mission.M3:
