@@ -1,4 +1,4 @@
-class_name SkirmishAI
+﻿class_name SkirmishAI
 extends Node
 
 # Step 7: Скирмиш-ИИ — копит ресурсы, спавнит вражеские отряды/технику, атакует.
@@ -11,6 +11,7 @@ const _SQUAD_SCRIPT := preload("res://scripts/core/SquadController.gd")
 var _resources: int = 150
 var _timer: float = 0.0
 var _spawned_squads: int = 0
+var _staging_squads: Array[Node2D] = []
 
 signal resources_changed(amount: int)
 
@@ -34,29 +35,39 @@ func _try_spawn() -> void:
 	if get_tree().get_nodes_in_group("enemy_squads").size() > 6:
 		return
 	var target: Node2D = _nearest_enemy_target()
+	var has_btr: bool = get_tree().get_nodes_in_group("enemy_vehicles").size() > 0
 	if _resources >= 250 and randf() < 0.4:
 		_spawn_enemy_vehicle()
 		_resources -= 250
+		has_btr = true
 	elif _resources >= 100:
 		var squad: SquadController = _spawn_enemy_squad()
 		_resources -= 100
-		if randf() < 0.35 and is_instance_valid(squad):
-			var flank_y: float = 220.0 if randf() < 0.5 else 1220.0
-			squad.move_squad(Vector2(1300.0, flank_y))
+		if is_instance_valid(squad):
+			_staging_squads.append(squad)
+			var staging_pos: Vector2 = Vector2(2150.0, 720.0) + Vector2(randf_range(-80.0, 80.0), randf_range(-120.0, 120.0))
+			squad.move_squad(staging_pos)
 	elif _resources >= 250:
 		_spawn_enemy_vehicle()
 		_resources -= 250
+		has_btr = true
 	elif _resources >= 75:
 		_spawn_enemy_drone()
 		_resources -= 75
-	if target != null and is_instance_valid(target):
-		var squads: Array = get_tree().get_nodes_in_group("enemy_squads")
-		var last: Node2D = null
-		for s in squads:
-			if is_instance_valid(s) and s != last:
-				last = s
-				if last.has_method("move_squad"):
-					last.move_squad(target.global_position)
+
+	var should_attack: bool = _staging_squads.size() >= 2 or has_btr
+	if should_attack and target != null and is_instance_valid(target) and not _staging_squads.is_empty():
+		var sent_flank: bool = false
+		for s in _staging_squads:
+			if not is_instance_valid(s) or not s.has_method("move_squad"):
+				continue
+			if not sent_flank and randf() < 0.4:
+				var flank_y: float = 200.0 if randf() < 0.5 else 1240.0
+				s.move_squad(Vector2(target.global_position.x, flank_y))
+				sent_flank = true
+			else:
+				s.move_squad(target.global_position)
+		_staging_squads.clear()
 
 func _spawn_enemy_squad() -> SquadController:
 	var squad: Node2D = _SQUAD_SCRIPT.new()
@@ -101,6 +112,28 @@ func _spawn_enemy_drone() -> void:
 	d.drone_type = DroneUnit.DroneType.FPV_KAMIKAZE
 	d.is_enemy = true
 	get_parent().add_child(d)
+
+	# Прицелиться в ближайшую технику или автотурель игрока, иначе в ближайший отряд пехоты
+	var target: Node2D = null
+	var best_d: float = INF
+	for g in ["player_vehicles", "player_turrets"]:
+		for node in get_tree().get_nodes_in_group(g):
+			if not is_instance_valid(node) or not (node is Node2D):
+				continue
+			var dd: float = d.global_position.distance_to((node as Node2D).global_position)
+			if dd < best_d:
+				best_d = dd
+				target = node
+	if target == null:
+		for node in get_tree().get_nodes_in_group("player_units"):
+			if not is_instance_valid(node) or not (node is Node2D):
+				continue
+			var dd: float = d.global_position.distance_to((node as Node2D).global_position)
+			if dd < best_d:
+				best_d = dd
+				target = node
+	if target != null and is_instance_valid(target) and d.has_method("set_destination"):
+		d.set_destination(target.global_position)
 
 func _nearest_enemy_target() -> Node2D:
 	var origin: Vector2 = Vector2(2150.0, 720.0)

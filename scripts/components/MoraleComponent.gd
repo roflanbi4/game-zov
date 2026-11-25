@@ -1,4 +1,4 @@
-class_name MoraleComponent
+﻿class_name MoraleComponent
 extends Node
 
 @export var max_morale: float = 100.0
@@ -87,13 +87,13 @@ func _update_panic_state() -> void:
 func _apply_panic_effects() -> void:
 	if soldier != null and is_instance_valid(soldier):
 		if _last_stand:
-			soldier.move_speed = _base_move_speed
+			soldier.call("set_speed_multiplier", "morale", 1.0)
 		elif is_suppressed:
-			soldier.move_speed = _base_move_speed * 0.7
+			soldier.call("set_speed_multiplier", "morale", 0.7)
 		elif is_panicked:
-			soldier.move_speed = _base_move_speed * 0.6
+			soldier.call("set_speed_multiplier", "morale", 0.6)
 		else:
-			soldier.move_speed = _base_move_speed
+			soldier.call("set_speed_multiplier", "morale", 1.0)
 	if weapon_component != null and is_instance_valid(weapon_component):
 		if _last_stand:
 			weapon_component.attack_cooldown = _base_attack_cooldown * 0.65

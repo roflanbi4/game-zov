@@ -1,4 +1,4 @@
-class_name AnomalyZone
+﻿class_name AnomalyZone
 extends Area2D
 
 enum AnomalyType { VORTEX = 0, THERMAL = 1, EMP = 2 }
@@ -92,9 +92,7 @@ func _on_body_entered(body: Node) -> void:
 	if body is DroneUnit:
 		body.disabled = true
 	elif body is VehicleUnit:
-		if not _emp_original_speeds.has(body):
-			_emp_original_speeds[body] = body.move_speed
-		body.move_speed = body.move_speed * 0.3
+		body.call("set_speed_multiplier", "emp", 0.3)
 
 func _on_body_exited(body: Node) -> void:
 	if anomaly_type == AnomalyType.VORTEX:
@@ -102,8 +100,8 @@ func _on_body_exited(body: Node) -> void:
 	if anomaly_type == AnomalyType.EMP:
 		if body is DroneUnit:
 			body.disabled = false
-		elif body is VehicleUnit and _emp_original_speeds.has(body):
-			body.move_speed = float(_emp_original_speeds[body])
+		elif body is VehicleUnit:
+			body.call("set_speed_multiplier", "emp", 1.0)
 			_emp_original_speeds.erase(body)
 
 func _apply_damage(body: Node, amount: int) -> void:

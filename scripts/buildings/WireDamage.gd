@@ -1,4 +1,4 @@
-extends Area2D
+﻿extends Area2D
 
 var _accum: float = 0.0
 
@@ -12,9 +12,7 @@ func _process(delta: float) -> void:
 		var groups: Array = body.get_groups()
 		if "enemy_units" not in groups and "mutants" not in groups:
 			continue
-		if not body.has_meta("pre_wire_speed"):
-			body.set_meta("pre_wire_speed", body.get("move_speed"))
-		body.set("move_speed", float(body.get_meta("pre_wire_speed")) * 0.45)
+		body.call("set_speed_multiplier", "wire", 0.45)
 		_accum += 4.0 * delta
 		if _accum >= 1.0:
 			_accum -= 1.0
@@ -25,6 +23,4 @@ func _process(delta: float) -> void:
 				body.take_damage(4)
 
 func _on_body_exited(body: Node2D) -> void:
-	if body.has_meta("pre_wire_speed"):
-		body.set("move_speed", float(body.get_meta("pre_wire_speed")))
-		body.remove_meta("pre_wire_speed")
+	body.call("set_speed_multiplier", "wire", 1.0)

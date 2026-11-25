@@ -1,4 +1,4 @@
-class_name DroneUnit
+﻿class_name DroneUnit
 extends CharacterBody2D
 
 enum DroneType { RECON = 0, FPV_KAMIKAZE = 1 }
@@ -43,7 +43,10 @@ func _ready() -> void:
 		add_child(rect)
 
 	current_hp = max_hp
-	set_physics_process(false)
+	if is_enemy and drone_type == DroneType.FPV_KAMIKAZE:
+		set_physics_process(true)
+	else:
+		set_physics_process(false)
 
 func set_destination(destination: Vector2) -> void:
 	target_position = destination
@@ -71,6 +74,27 @@ func _physics_process(_delta: float) -> void:
 		velocity = Vector2.ZERO
 		move_and_slide()
 		return
+	if is_enemy and drone_type == DroneType.FPV_KAMIKAZE and not disabled:
+		var best_target: Node2D = null
+		var best_dist: float = INF
+		for group in ["player_vehicles", "player_turrets"]:
+			for node in get_tree().get_nodes_in_group(group):
+				if not is_instance_valid(node) or not (node is Node2D):
+					continue
+				var d: float = global_position.distance_to((node as Node2D).global_position)
+				if d < best_dist:
+					best_dist = d
+					best_target = node as Node2D
+		if best_target == null:
+			for node in get_tree().get_nodes_in_group("player_units"):
+				if not is_instance_valid(node) or not (node is Node2D):
+					continue
+				var d: float = global_position.distance_to((node as Node2D).global_position)
+				if d < best_dist:
+					best_dist = d
+					best_target = node as Node2D
+		if best_target != null:
+			target_position = best_target.global_position
 	if target_position == Vector2.ZERO:
 		velocity = Vector2.ZERO
 		move_and_slide()

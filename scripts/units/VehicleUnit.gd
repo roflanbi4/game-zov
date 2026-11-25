@@ -1,4 +1,4 @@
-class_name VehicleUnit
+﻿class_name VehicleUnit
 extends CharacterBody2D
 
 @export var is_ew_jammer: bool = false
@@ -17,6 +17,8 @@ var hold_mode: bool = false
 var health_component: HealthComponent
 var weapon: WeaponComponent
 var nav_agent: NavigationAgent2D
+var _base_speed: float = 0.0
+var _speed_mults: Dictionary = {}
 
 func _ready() -> void:
 	z_index = 5
@@ -60,6 +62,7 @@ func _ready() -> void:
 	nav_agent.name = "NavigationAgent2D"
 	add_child(nav_agent)
 
+	_base_speed = move_speed
 	set_physics_process(false)
 
 func set_destination(destination: Vector2) -> void:
@@ -137,3 +140,15 @@ func _spawn_loot(pos: Vector2) -> void:
 	crate.loot_type = randi() % 3
 	get_tree().current_scene.add_child(crate)
 	crate.global_position = pos
+
+func set_speed_multiplier(source: String, mult: float) -> void:
+	if _base_speed <= 0.0:
+		_base_speed = move_speed
+	if is_equal_approx(mult, 1.0):
+		_speed_mults.erase(source)
+	else:
+		_speed_mults[source] = mult
+	var final_speed: float = _base_speed
+	for v in _speed_mults.values():
+		final_speed *= float(v)
+	move_speed = final_speed

@@ -88,22 +88,14 @@ func generate_map(seed_val: int = 0) -> void:
 			if not body.has_meta("swamp_mult"):
 				body.set_meta("swamp_mult", 1.0)
 			body.set_meta("swamp_mult", 0.6)
-			var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
-			var current_road_mult: float = float(body.get_meta("road_mult"))
-			var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
-			body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
+			body.call("set_speed_multiplier", "swamp", 0.6)
 		)
 
 		swamp.body_exited.connect(func(body: Node) -> void:
 			if not body.has_meta("terrain_base_move_speed"):
 				return
 			body.set_meta("swamp_mult", 1.0)
-			var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
-			var current_road_mult: float = 1.0
-			if body.has_meta("road_mult"):
-				current_road_mult = float(body.get_meta("road_mult"))
-			var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
-			body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
+			body.call("set_speed_multiplier", "swamp", 1.0)
 		)
 	# --- Р РђР”РРћРђРљРўРР’РќР«Р• Р›РЈР–Р (2вЂ“3 РїСЏС‚РЅР°) ---
 	var rad_count: int = rng.randi_range(2, 3)
@@ -275,10 +267,7 @@ func _create_road_segment(rect: Rect2) -> Area2D:
 		elif body.is_in_group("player_units") or body.is_in_group("enemy_units"):
 			road_mult = 1.15
 		body.set_meta("road_mult", road_mult)
-		var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
-		var current_road_mult: float = float(body.get_meta("road_mult"))
-		var current_swamp_mult: float = float(body.get_meta("swamp_mult"))
-		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
+		body.call("set_speed_multiplier", "road", road_mult)
 	)
 
 	# body_exited: пересчитать скорость без дороги
@@ -286,12 +275,7 @@ func _create_road_segment(rect: Rect2) -> Area2D:
 		if not body.has_meta("terrain_base_move_speed"):
 			return
 		body.set_meta("road_mult", 1.0)
-		var base_speed: float = float(body.get_meta("terrain_base_move_speed"))
-		var current_road_mult: float = float(body.get_meta("road_mult"))
-		var current_swamp_mult: float = 1.0
-		if body.has_meta("swamp_mult"):
-			current_swamp_mult = float(body.get_meta("swamp_mult"))
-		body.set("move_speed", base_speed * current_road_mult * current_swamp_mult)
+		body.call("set_speed_multiplier", "road", 1.0)
 	)
 
 	return road

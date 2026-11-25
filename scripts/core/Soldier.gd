@@ -1,4 +1,4 @@
-class_name Soldier
+﻿class_name Soldier
 extends CharacterBody2D
 
 @export var move_speed: float = 180.0
@@ -19,11 +19,14 @@ var hold_mode: bool = false
 var squad_controller: Node2D = null
 var is_flanked: bool = false
 var _flank_marker: ColorRect = null
+var _base_speed: float = 0.0
+var _speed_mults: Dictionary = {}
 
 
 func _ready() -> void:
 	z_index = 5
 	safe_margin = 0.08
+	_base_speed = move_speed
 	set_physics_process(false)
 	
 	health_component = get_node_or_null("HealthComponent")
@@ -166,3 +169,15 @@ func _process(_delta: float) -> void:
 	cone.rotation = _last_facing.angle()
 	if _flank_marker != null and _flank_marker.visible:
 		_flank_marker.position = Vector2(-5.0, -20.0)
+
+func set_speed_multiplier(source: String, mult: float) -> void:
+	if _base_speed <= 0.0:
+		_base_speed = move_speed
+	if is_equal_approx(mult, 1.0):
+		_speed_mults.erase(source)
+	else:
+		_speed_mults[source] = mult
+	var final_speed: float = _base_speed
+	for v in _speed_mults.values():
+		final_speed *= float(v)
+	move_speed = final_speed

@@ -1,4 +1,4 @@
-class_name ArtifactPickup
+﻿class_name ArtifactPickup
 extends Area2D
 
 enum BuffType { SPEED = 0, HP = 1 }
@@ -54,10 +54,7 @@ func _apply_buff(squad: Node) -> void:
 		if not is_instance_valid(s):
 			continue
 		if buff_type == BuffType.SPEED:
-			if not s.has_meta("base_move_speed"):
-				s.set_meta("base_move_speed", s.move_speed)
-			var base_speed: float = float(s.get_meta("base_move_speed"))
-			s.move_speed = base_speed * 1.3
+			s.call("set_speed_multiplier", "artifact", 1.3)
 		else:
 			var health: HealthComponent = s.get_node_or_null("HealthComponent") as HealthComponent
 			if health != null:
