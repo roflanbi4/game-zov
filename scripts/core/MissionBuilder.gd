@@ -121,7 +121,7 @@ static func _make_base(parent: Node, pos: Vector2, hp: int) -> StaticBody2D:
 	parent.call_deferred("add_child", base)
 	return base
 
-static func build_mission_1(parent: Node) -> void:
+static func build_mission_1(parent: Node, env: Node2D = null) -> void:
 	var mm := _mm(parent)
 	if mm != null:
 		mm._set_objective("M1 [Corps]: Capture 3 control points and repel 2 mutant waves")
@@ -129,9 +129,13 @@ static func build_mission_1(parent: Node) -> void:
 	if hud != null:
 		hud.call_deferred("set_night", false)
 	spawn_player_squad(parent, Vector2(200, 400), 3)
-	_make_control_point(parent, Vector2(700, 350))
-	_make_control_point(parent, Vector2(1300, 720))
-	_make_control_point(parent, Vector2(1900, 1050))
+	var town_pos: Vector2 = env.town_pos if env != null else Vector2(1150.0, 340.0)
+	var crossroad_pos: Vector2 = env.crossroad_pos if env != null else Vector2(1280.0, 720.0)
+	var checkpoint_pos: Vector2 = env.checkpoint_pos if env != null else Vector2(1480.0, 720.0)
+	_make_control_point(parent, town_pos)
+	_make_control_point(parent, crossroad_pos)
+	_make_control_point(parent, checkpoint_pos + Vector2(220.0, 0.0))
+	spawn_enemy_squad(parent, town_pos, 3)
 	var spawner := MutantWaveSpawner.new()
 	spawner.name = "MutantWaveSpawner"
 	spawner.max_waves = 2
@@ -141,33 +145,33 @@ static func build_mission_1(parent: Node) -> void:
 	spawner.brute_count = 1
 	parent.call_deferred("add_child", spawner)
 
-static func build_mission_2(parent: Node) -> Array[VehicleUnit]:
+static func build_mission_2(parent: Node, env: Node2D = null) -> Array[VehicleUnit]:
 	var mm := _mm(parent)
 	if mm != null:
 		mm._set_objective("M2 [Corps]: Escort 2 trucks to extraction zone on the right")
 	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
 	if hud != null:
 		hud.call_deferred("set_night", true)
+	var checkpoint_y: float = env.checkpoint_pos.y if env != null else 720.0
 	var trucks: Array[VehicleUnit] = []
 	for i in range(2):
-		var truck: VehicleUnit = _make_vehicle(parent, Vector2(200 + i * 80, 540), false)
+		var truck: VehicleUnit = _make_vehicle(parent, Vector2(200 + i * 80, checkpoint_y), false)
 		truck.move_speed = 80.0
 		var hc: HealthComponent = truck.get_node_or_null("HealthComponent") as HealthComponent
 		if hc != null:
 			hc.max_hp = 400
 			hc.current_hp = 400
 		trucks.append(truck)
-	spawn_player_squad(parent, Vector2(200, 400), 4)
-	_make_anomaly(parent, Vector2(600, 300), AnomalyZone.AnomalyType.VORTEX, 140.0)
-	_make_anomaly(parent, Vector2(950, 700), AnomalyZone.AnomalyType.VORTEX, 120.0)
-	_make_anomaly(parent, Vector2(1300, 400), AnomalyZone.AnomalyType.VORTEX, 150.0)
-	_make_barrel(parent, Vector2(550, 540))
-	_make_barrel(parent, Vector2(800, 600))
-	_make_barrel(parent, Vector2(1100, 500))
-	_make_barrel(parent, Vector2(1400, 550))
+	spawn_player_squad(parent, Vector2(200, checkpoint_y), 4)
+	_make_anomaly(parent, Vector2(600, checkpoint_y - 240.0), AnomalyZone.AnomalyType.VORTEX, 140.0)
+	_make_anomaly(parent, Vector2(950, checkpoint_y), AnomalyZone.AnomalyType.VORTEX, 120.0)
+	_make_barrel(parent, Vector2(550, checkpoint_y))
+	_make_barrel(parent, Vector2(800, checkpoint_y + 60.0))
+	_make_barrel(parent, Vector2(1100, checkpoint_y))
+	_make_barrel(parent, Vector2(1400, checkpoint_y - 50.0))
 	var extract := Area2D.new()
 	extract.name = "ExtractionZone"
-	extract.position = Vector2(2350, 720)
+	extract.position = Vector2(2400.0, checkpoint_y)
 	var cs := CollisionShape2D.new()
 	var rs := RectangleShape2D.new()
 	rs.size = Vector2(100, 300)
@@ -182,7 +186,7 @@ static func build_mission_2(parent: Node) -> Array[VehicleUnit]:
 	return trucks
 
 
-static func build_mission_3(parent: Node) -> StaticBody2D:
+static func build_mission_3(parent: Node, env: Node2D = null) -> StaticBody2D:
 	var mm := _mm(parent)
 	if mm != null:
 		mm._set_objective("M3 [Syndicate]: Night raid - destroy Corps base")
@@ -192,9 +196,11 @@ static func build_mission_3(parent: Node) -> StaticBody2D:
 	_make_drone(parent, Vector2(200, 400), DroneUnit.DroneType.FPV_KAMIKAZE, false)
 	_make_drone(parent, Vector2(240, 400), DroneUnit.DroneType.FPV_KAMIKAZE, false)
 	spawn_player_squad(parent, Vector2(200, 350), 3)
-	var base: StaticBody2D = _make_base(parent, Vector2(2100, 720), 1500)
-	spawn_enemy_squad(parent, Vector2(1350, 450), 3)
-	spawn_enemy_squad(parent, Vector2(1350, 650), 3)
+	var checkpoint_y: float = env.checkpoint_pos.y if env != null else 720.0
+	var base: StaticBody2D = _make_base(parent, Vector2(2250.0, checkpoint_y), 1500)
+	var town_pos: Vector2 = env.town_pos if env != null else Vector2(1150.0, 340.0)
+	spawn_enemy_squad(parent, town_pos, 3)
+	spawn_enemy_squad(parent, Vector2(1800.0, checkpoint_y), 3)
 	var ai := SkirmishAI.new()
 	ai.name = "SkirmishAI"
 	ai.think_interval = 12.0
@@ -202,16 +208,16 @@ static func build_mission_3(parent: Node) -> StaticBody2D:
 	parent.call_deferred("add_child", ai)
 	return base
 
-static func build_mission_4(parent: Node) -> void:
+static func build_mission_4(parent: Node, env: Node2D = null) -> void:
 	var mm := _mm(parent)
 	if mm != null:
 		mm._set_objective("M4 [Syndicate]: Heart of the Rift - hold the artifact point for 180 sec")
 	var hud: GameHUD = parent.get_node_or_null("GameHUD") as GameHUD
 	if hud != null:
 		hud.call_deferred("set_night", false)
-	var cp: ControlPoint = _make_control_point(parent, Vector2(1280, 720))
+	var cp: ControlPoint = _make_control_point(parent, env.town_pos if env != null else Vector2(1280, 720))
 	cp.capture_time = 2.0
-	_make_artifact(parent, Vector2(1280, 720), ArtifactPickup.BuffType.HP)
+	_make_artifact(parent, env.town_pos if env != null else Vector2(1280, 720), ArtifactPickup.BuffType.HP)
 	spawn_player_squad(parent, Vector2(200, 400), 3)
 	var spawner := MutantWaveSpawner.new()
 	spawner.name = "MutantWaveSpawner"
@@ -227,7 +233,7 @@ static func build_mission_4(parent: Node) -> void:
 	ai.starting_resources = 400
 	parent.call_deferred("add_child", ai)
 
-static func build_sandbox(parent: Node) -> void:
+static func build_sandbox(parent: Node, env: Node2D = null) -> void:
 	var mm := _mm(parent)
 	if mm != null:
 		mm._set_objective("Sandbox: build an army and capture points")
@@ -235,8 +241,8 @@ static func build_sandbox(parent: Node) -> void:
 	if hud != null:
 		hud.call_deferred("set_night", false)
 	spawn_player_squad(parent, Vector2(200, 400), 3)
-	_make_control_point(parent, Vector2(600, 300))
-	_make_control_point(parent, Vector2(1300, 700))
+	_make_control_point(parent, env.town_pos if env != null else Vector2(600, 300))
+	_make_control_point(parent, env.crossroad_pos if env != null else Vector2(1300, 700))
 	var ai := SkirmishAI.new()
 	ai.name = "SkirmishAI"
 	ai.think_interval = 15.0

@@ -92,18 +92,17 @@ func _start_mission(m: int) -> void:
 	_clear_world()
 	await get_tree().process_frame
 	_build_base()
-	match m:
-		Mission.M1: _BUILDER.build_mission_1(get_parent())
-		Mission.M2: _convoy_trucks = _BUILDER.build_mission_2(get_parent())
-		Mission.M3: _base = _BUILDER.build_mission_3(get_parent())
-		Mission.M4: _BUILDER.build_mission_4(get_parent())
-		Mission.SANDBOX: _BUILDER.build_sandbox(get_parent())
-		_: pass
 	var env: Node2D = preload("res://scripts/environment/ZoneEnvironment.gd").new()
 	env.z_index = 0
 	get_parent().add_child(env)
-	var seed_val: int = int(m) * 1337 if m != Mission.SANDBOX else 0
-	env.generate_map(seed_val)
+	env.generate_map(0)
+	match m:
+		Mission.M1: _BUILDER.build_mission_1(get_parent(), env)
+		Mission.M2: _convoy_trucks = _BUILDER.build_mission_2(get_parent(), env)
+		Mission.M3: _base = _BUILDER.build_mission_3(get_parent(), env)
+		Mission.M4: _BUILDER.build_mission_4(get_parent(), env)
+		Mission.SANDBOX: _BUILDER.build_sandbox(get_parent(), env)
+		_: pass
 	_mission_start_time = Time.get_ticks_msec() / 1000.0
 
 func _clear_world() -> void:
